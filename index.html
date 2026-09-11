@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>REDLINE — build 0.4.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>REDLINE — build 0.4.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -18,11 +18,11 @@
     --panel:rgba(24,20,16,.8); --panelBorder:rgba(232,226,212,.3);
     --promptBg:rgba(22,18,14,.92); --onTxt:#17140f;
   }
-  *{margin:0;padding:0;box-sizing:border-box}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{width:100%;height:100%;overflow:hidden;background:#0d0c0a;
     font-family:'IBM Plex Mono',monospace;color:var(--ink);user-select:none;
     -webkit-user-select:none;touch-action:none;overscroll-behavior:none}
-  canvas{position:fixed;inset:0;z-index:0;display:block}
+  canvas{position:fixed;inset:0;z-index:0;display:block;touch-action:none}
   canvas.oldlook{filter:saturate(.6) contrast(1.1) brightness(.96);image-rendering:pixelated}
 
   /* screen fx */
@@ -180,30 +180,94 @@
   #pauseBtn:active{background:var(--red);color:#fff}
   body.playing #pauseBtn{display:block}
 
-  /* touch controls — only rendered when body.mobile */
+  /* ============================================================
+     MOBILE TOUCH LAYER v2 — visibility is driven purely from JS
+     (syncTouchUI sets display directly; no CSS-class race).
+     ============================================================ */
   #touchUI{position:fixed;inset:0;z-index:11;pointer-events:none;display:none}
-  body.mobile.playing #touchUI{display:block}
-  #joyZone{position:absolute;left:0;bottom:0;width:44%;height:62%;pointer-events:auto}
-  #lookZone{position:absolute;right:0;bottom:0;width:56%;height:70%;pointer-events:auto}
-  #joyBase{position:absolute;width:118px;height:118px;border-radius:50%;
+  #joyZone{position:absolute;left:0;bottom:0;width:46%;height:64%;
+    pointer-events:auto;touch-action:none}
+  #lookZone{position:absolute;right:0;bottom:0;width:54%;height:74%;
+    pointer-events:auto;touch-action:none}
+  #joyBase{position:absolute;width:124px;height:124px;border-radius:50%;
     border:2px solid rgba(232,226,212,.35);background:rgba(20,20,20,.22);
-    display:none;pointer-events:none}
-  #joyKnob{position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;
+    display:none;pointer-events:none;touch-action:none}
+  #joyKnob{position:absolute;left:50%;top:50%;width:54px;height:54px;border-radius:50%;
     background:rgba(232,226,212,.45);transform:translate(-50%,-50%)}
-  .tbtn{position:absolute;pointer-events:auto;border:2px solid rgba(232,226,212,.4);
-    background:rgba(20,20,20,.3);color:#e8e2d4;font:700 12px/1 'IBM Plex Mono',monospace;
-    border-radius:50%;display:flex;align-items:center;justify-content:center;
-    letter-spacing:.05em}
-  .tbtn:active,.tbtn.held{background:rgba(255,36,24,.5)}
-  #tbFire{right:24px;bottom:92px;width:92px;height:92px;font-size:14px}
-  #tbJump{right:36px;bottom:200px;width:58px;height:58px}
-  #tbSlide{right:112px;bottom:214px;width:58px;height:58px;font-size:10px}
-  #tbDash{right:36px;bottom:308px;width:58px;height:58px;font-size:10px}
-  #tbFocus{right:112px;bottom:322px;width:58px;height:58px;font-size:10px}
-  #tbReload{right:196px;bottom:120px;width:58px;height:58px;font-size:10px}
-  #tbUse{right:196px;bottom:196px;width:58px;height:58px;font-size:10px}
-  #tbPrev{left:46%;bottom:24px;width:46px;height:46px;font-size:16px}
-  #tbNext{left:46%;bottom:80px;width:46px;height:46px;font-size:16px}
+  #joyRing{position:absolute;inset:-8px;border-radius:50%;border:3px solid var(--red);
+    opacity:0;transition:opacity .12s}
+  .tbtn{position:absolute;pointer-events:auto;touch-action:none;
+    border:2px solid rgba(232,226,212,.4);background:rgba(20,20,20,.32);
+    color:#e8e2d4;font:700 12px/1 'IBM Plex Mono',monospace;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;letter-spacing:.05em}
+  .tbtn:active,.tbtn.held{background:rgba(255,36,24,.55)}
+  .tbtn.pulse{animation:tbp 1s infinite}
+  @keyframes tbp{0%,100%{border-color:rgba(232,226,212,.4)}
+    50%{border-color:var(--red);box-shadow:0 0 12px rgba(255,36,24,.6)}}
+  #tbFire{right:calc(22px + env(safe-area-inset-right));
+    bottom:calc(88px + env(safe-area-inset-bottom));width:96px;height:96px;font-size:14px}
+  #tbJump{right:calc(34px + env(safe-area-inset-right));
+    bottom:calc(200px + env(safe-area-inset-bottom));width:60px;height:60px;font-size:10px}
+  #tbSlide{right:calc(110px + env(safe-area-inset-right));
+    bottom:calc(214px + env(safe-area-inset-bottom));width:60px;height:60px;font-size:10px}
+  #tbDash{right:calc(34px + env(safe-area-inset-right));
+    bottom:calc(310px + env(safe-area-inset-bottom));width:60px;height:60px;font-size:10px}
+  #tbFocus{right:calc(110px + env(safe-area-inset-right));
+    bottom:calc(324px + env(safe-area-inset-bottom));width:60px;height:60px;font-size:10px}
+  #tbReload{right:calc(198px + env(safe-area-inset-right));
+    bottom:calc(116px + env(safe-area-inset-bottom));width:60px;height:60px;font-size:10px}
+  #tbUse{right:calc(198px + env(safe-area-inset-right));
+    bottom:calc(196px + env(safe-area-inset-bottom));width:60px;height:60px;font-size:10px}
+  #tbPrev{left:46%;bottom:calc(20px + env(safe-area-inset-bottom));
+    width:46px;height:46px;font-size:16px}
+  #tbNext{left:46%;bottom:calc(76px + env(safe-area-inset-bottom));
+    width:46px;height:46px;font-size:16px}
+
+  /* ============================================================
+     MOBILE HUD OVERRIDES — compact, notch-aware layout
+     ============================================================ */
+  body.mobile #hudTL{top:calc(12px + env(safe-area-inset-top));left:14px}
+  body.mobile #moneyV{font-size:22px}
+  body.mobile #comboV{font-size:14px;min-height:17px}
+  body.mobile #hudTC{top:calc(10px + env(safe-area-inset-top))}
+  body.mobile #roundTxt{font-size:10px}
+  body.mobile #interTxt{font-size:9px}
+  body.mobile #mapTxt{display:none}
+  body.mobile #focusWrap{bottom:auto;top:calc(44px + env(safe-area-inset-top))}
+  body.mobile #focusLbl{display:none}
+  body.mobile #focusBar{width:190px;margin-top:2px}
+  body.mobile #compass{top:calc(60px + env(safe-area-inset-top));width:210px}
+  body.mobile #killfeed{top:calc(60px + env(safe-area-inset-top));
+    right:calc(14px + env(safe-area-inset-right))}
+  body.mobile .kf{font-size:9px;margin-bottom:3px}
+  body.mobile #hp{left:14px;bottom:calc(16px + env(safe-area-inset-bottom))}
+  body.mobile #hp i{width:30px;height:9px}
+  body.mobile #strip{bottom:calc(12px + env(safe-area-inset-bottom));gap:3px;
+    pointer-events:auto}
+  body.mobile .slot{padding:3px 5px 2px;min-width:28px}
+  body.mobile .slot .c{font-size:9px}
+  body.mobile .slot .k{font-size:8px}
+  body.mobile #ammoBox{right:calc(14px + env(safe-area-inset-right));
+    bottom:calc(196px + env(safe-area-inset-bottom))}
+  body.mobile #ammoN{font-size:30px}
+  body.mobile #ammoM{font-size:11px}
+  body.mobile #gunName{font-size:10px}
+  body.mobile #rl{width:96px}
+  body.mobile #prompt{bottom:calc(284px + env(safe-area-inset-bottom));font-size:12px;
+    padding:8px 12px;max-width:80vw}
+  body.mobile #fpsBox{top:calc(12px + env(safe-area-inset-top));
+    right:calc(70px + env(safe-area-inset-right));font-size:9px;padding:3px 7px}
+  body.mobile #pauseBtn{top:calc(10px + env(safe-area-inset-top));
+    right:calc(12px + env(safe-area-inset-right));width:48px;height:48px;font-size:20px}
+  body.mobile #annM{font-size:clamp(28px,7vw,64px)}
+  body.mobile #annS{font-size:10px}
+
+  /* rotate hint */
+  #rotHint{position:fixed;top:0;left:0;right:0;z-index:16;display:none;
+    background:rgba(17,17,22,.92);color:var(--paper);text-align:center;
+    font:700 12px/1 'IBM Plex Mono',monospace;letter-spacing:.3em;padding:14px 10px;
+    pointer-events:none}
+  #rotHint.on{display:block}
 
   /* buttons */
   .btnSolid,#startBtn,#retryBtn{pointer-events:auto;cursor:pointer;border:none;
@@ -325,6 +389,7 @@
     background:transparent;color:var(--ink);font:700 10px 'IBM Plex Mono',monospace;
     padding:6px 10px;letter-spacing:.1em}
   .mode3 button.on{background:var(--ink);color:var(--paper)}
+  #detectInfo{font-size:10px;letter-spacing:.2em;opacity:.6;margin-top:10px}
   #setFoot{padding:13px 26px;border-top:2px solid var(--ink);display:flex;
     justify-content:space-between;align-items:center}
   #setFoot .hint{font-size:10px;letter-spacing:.25em;opacity:.5}
@@ -393,11 +458,11 @@
 
 <div id="pauseBtn">☰</div>
 
-<!-- touch layer: hidden unless body.mobile AND playing -->
+<!-- touch layer — display is set directly by syncTouchUI() -->
 <div id="touchUI">
   <div id="joyZone"></div>
   <div id="lookZone"></div>
-  <div id="joyBase"><div id="joyKnob"></div></div>
+  <div id="joyBase"><div id="joyRing"></div><div id="joyKnob"></div></div>
   <div class="tbtn" id="tbFire">FIRE</div>
   <div class="tbtn" id="tbJump">JUMP</div>
   <div class="tbtn" id="tbSlide">SLIDE</div>
@@ -408,6 +473,8 @@
   <div class="tbtn" id="tbPrev">‹</div>
   <div class="tbtn" id="tbNext">›</div>
 </div>
+
+<div id="rotHint">⟳ ROTATE FOR THE BEST VIEW</div>
 
 <div id="oldFx">
   <canvas id="grainCv" width="168" height="94"></canvas>
@@ -420,7 +487,7 @@
 
 <div id="menu" class="ov">
   <div id="menuTop">
-    <span>REDLINE <b>/</b> BUILD 0.4.1</span>
+    <span>REDLINE <b>/</b> BUILD 0.4.2</span>
     <span>4 MODES · 5 MAPS</span>
   </div>
   <div id="tag">CHOOSE HOW IT ENDS.</div>
@@ -508,21 +575,6 @@ const muzW=new THREE.Vector3();
 function normAng(a){while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;}
 
 /* ============================================================
-   MOBILE DETECTION — real detection, not a blanket switch.
-   A device is treated as mobile only if its PRIMARY pointer is
-   coarse AND it can't hover (phones/tablets). Touch-screen
-   laptops have a fine, hover-capable mouse -> desktop mode.
-   The user can override with the Control Mode setting.
-   ============================================================ */
-const HAS_TOUCH=('ontouchstart' in window)||navigator.maxTouchPoints>0;
-const COARSE_PTR=matchMedia('(pointer: coarse)').matches;
-const NO_HOVER=matchMedia('(hover: none)').matches;
-const DETECTED_MOBILE=HAS_TOUCH&&COARSE_PTR&&NO_HOVER;
-
-/* runtime state consumed by touch controls */
-const touchState={mx:0,my:0,fire:false,focus:false,crouchHold:false};
-
-/* ============================================================
    SETTINGS
    ============================================================ */
 const BINDS=[
@@ -542,7 +594,9 @@ const DEFAULTS={
   sens:1.0,invertY:false,fov:78,autoReload:true,
   bob:true,shake:1.0,crosshair:true,fps:false,vol:.42,
   filmFx:true,bright:1.0,compass:true,
-  ctrlMode:'auto', /* auto | desktop | touch */
+  ctrlMode:'auto',
+  aimAssist:true,aimAssistStr:.35,autoFire:true,
+  haptics:true,tapShoot:true,
   binds:Object.fromEntries(BINDS.map(b=>[b.id,b.def])),
 };
 function loadSettings(){
@@ -553,29 +607,6 @@ function loadSettings(){
 }
 const settings=loadSettings();
 function saveSettings(){try{localStorage.setItem('redline_cfg',JSON.stringify(settings));}catch(e){}}
-
-/* resolve current mobile state from the mode setting */
-function isMobile(){
-  if(settings.ctrlMode==='touch')return true;
-  if(settings.ctrlMode==='desktop')return false;
-  return DETECTED_MOBILE;
-}
-function applyControlMode(){
-  const m=isMobile();
-  document.body.classList.toggle('mobile',m);
-  $('touchUI').style.display='none'; /* shown via CSS when .playing */
-  if(m&&document.pointerLockElement)document.exitPointerLock();
-}
-applyControlMode();
-
-function applySettings(){
-  if(master)master.gain.value=settings.vol;
-  $('ch').style.display=settings.crosshair?'':'none';
-  $('fpsBox').style.display=settings.fps?'block':'none';
-  $('compass').style.display=settings.compass?'':'none';
-  if(horrorMode)renderer.toneMappingExposure=1.0*settings.bright;
-  applyControlMode();
-}
 function keyName(c){
   if(!c)return '— UNBOUND —';
   const map={Space:'SPACE',ShiftLeft:'L-SHIFT',ShiftRight:'R-SHIFT',
@@ -591,12 +622,116 @@ const kd=a=>{const c=settings.binds[a];return c?!!keys[c]:false;};
 const chestY=()=>player.pos.y+player.eye*.68;
 
 /* ============================================================
+   MOBILE SYSTEM v2
+   ------------------------------------------------------------
+   1) DETECTION: mobile only when the primary pointer is coarse,
+      hover is impossible, AND touch exists (real phones/tablets).
+      Touch laptops keep desktop. User can override in Settings.
+   2) VISIBILITY: syncTouchUI() sets #touchUI.style.display
+      directly from game state. No CSS-class races, ever.
+   3) INPUT: Pointer Events (touch + mouse unified). The joystick,
+      look zone and buttons track pointerId, so multi-touch
+      (move + look + fire at once) is reliable.
+   4) ASSIST: aim assist (bullet magnetism) + optional auto-fire,
+      because thumb-aiming a raw hitscan game is miserable.
+   5) FEEL: haptics, adaptive resolution, fullscreen+landscape,
+      rotate hint, audio unlock on first touch.
+   ============================================================ */
+
+/* ---- 1) DETECTION ---- */
+const HAS_TOUCH=('ontouchstart' in window)||navigator.maxTouchPoints>0;
+const COARSE_PTR=matchMedia('(pointer: coarse)').matches;
+const NO_HOVER=matchMedia('(hover: none)').matches;
+const DETECTED_MOBILE=HAS_TOUCH&&COARSE_PTR&&NO_HOVER;
+
+/* shared touch input state, consumed by gameplay */
+const touchState={mx:0,my:0,fire:false,focus:false,crouchHold:false};
+
+/* mobile runtime record */
+const MOB={
+  showUI:false,        /* master switch for the touch layer */
+  pr:1,                /* adaptive pixel ratio */
+  basePR:1,
+  joyId:null,lookId:null,
+  tapT:0,tapX:0,tapY:0,tapMoved:0,
+  lastLeftTap:0,
+  rotT:0,
+};
+function isMobile(){
+  if(settings.ctrlMode==='touch')return true;
+  if(settings.ctrlMode==='desktop')return false;
+  return DETECTED_MOBILE;
+}
+function computeBasePR(){
+  MOB.basePR=Math.min(devicePixelRatio||1,isMobile()?1.5:2);
+  MOB.pr=MOB.basePR;
+}
+computeBasePR();
+const NORMAL_PR=()=>MOB.pr;
+const HORROR_PR=()=>Math.max(.55,MOB.pr*.55);
+
+/* ---- 2) VISIBILITY ---- */
+function syncTouchUI(){
+  const el=$('touchUI');
+  const on=isMobile()&&MOB.showUI&&document.body.classList.contains('playing');
+  const v=on?'block':'none';
+  if(el.style.display!==v)el.style.display=v;
+}
+function applyControlMode(){
+  document.body.classList.toggle('mobile',isMobile());
+  computeBasePR();
+  if(!isMobile()&&document.pointerLockElement){}
+  if(isMobile()&&document.pointerLockElement)document.exitPointerLock();
+  renderer&&renderer.setPixelRatio(horrorMode?HORROR_PR():NORMAL_PR());
+  syncTouchUI();
+}
+
+/* ---- 5) FEEL helpers ---- */
+function buzz(ms){
+  if(!isMobile()||!settings.haptics)return;
+  try{if(navigator.vibrate)navigator.vibrate(ms);}catch(e){}
+}
+function tryFullscreenOrient(){
+  if(!isMobile())return;
+  try{
+    const el=document.documentElement;
+    const rf=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(rf&&!document.fullscreenElement){
+      const p=rf.call(el);
+      if(p&&p.catch)p.catch(()=>{});
+    }
+  }catch(e){}
+  try{
+    if(screen.orientation&&screen.orientation.lock)
+      screen.orientation.lock('landscape').catch(()=>{});
+  }catch(e){}
+}
+function updateRotateHint(){
+  const el=$('rotHint');
+  const want=isMobile()&&MOB.showUI&&innerHeight>innerWidth;
+  if(want&&!el.classList.contains('on')){
+    el.classList.add('on');
+    clearTimeout(updateRotateHint.t);
+    updateRotateHint.t=setTimeout(()=>el.classList.remove('on'),3500);
+  }else if(!want){
+    el.classList.remove('on');
+  }
+}
+addEventListener('resize',updateRotateHint);
+
+/* audio unlock: iOS needs a gesture; pointerdown anywhere counts */
+let audioUnlocked=false;
+addEventListener('pointerdown',()=>{
+  if(audioUnlocked)return;
+  audioUnlocked=true;
+  try{initAudio();}catch(e){}
+},{capture:true});
+
+/* ============================================================
    RENDERER / SCENE / LIGHTS
    ============================================================ */
 const renderer=new THREE.WebGLRenderer({antialias:!isMobile()});
-const NORMAL_PR=Math.min(devicePixelRatio,isMobile()?1.5:2);
-const HORROR_PR=clamp(NORMAL_PR*.55,.55,1);
-renderer.setPixelRatio(NORMAL_PR);
+renderer.setPixelRatio(NORMAL_PR());
 renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -637,6 +772,19 @@ addEventListener('resize',()=>{
   renderer.setSize(innerWidth,innerHeight);
 });
 addEventListener('contextmenu',e=>e.preventDefault());
+
+/* forward declarations used before their definitions */
+let horrorMode=false;
+let state='menu';
+
+function applySettings(){
+  if(master)master.gain.value=settings.vol;
+  $('ch').style.display=settings.crosshair?'':'none';
+  $('fpsBox').style.display=settings.fps?'block':'none';
+  $('compass').style.display=settings.compass?'':'none';
+  if(horrorMode)renderer.toneMappingExposure=1.0*settings.bright;
+  applyControlMode();
+}
 
 /* ============================================================
    PROCEDURAL TEXTURES
@@ -969,7 +1117,6 @@ const OLDMAT={
   plate:new THREE.MeshStandardMaterial({map:OLDT.plate,roughness:1,metalness:.3}),
   dark:new THREE.MeshStandardMaterial({color:0x1a1613,roughness:1}),
 };
-/* soldier uniform bases — cloned per soldier */
 const UNI={
   cloth:new THREE.MeshStandardMaterial({color:0x55603f,roughness:.95,flatShading:true}),
   clothD:new THREE.MeshStandardMaterial({color:0x39422e,roughness:.95,flatShading:true}),
@@ -2224,16 +2371,16 @@ beamMesh.visible=false;
 scene.add(beamMesh);
 
 /* ============================================================
-   GAME STATE — all declared once, up front
+   GAME STATE
    ============================================================ */
-let state='menu',paused=false;
+let paused=false;
 let timeScale=1,shake=0,recoilP=0,fovK=0;
 let money=500,score=0,combo=0,comboT=0,round=0,bestCombo=0;
 const stats={shots:0,hitShots:0,kills:0,deaths:0};
 let chain=1,lastKillT=-9,vigA=0;
 let interT=0,spawnT=0;
 let queue=[];
-let horrorMode=false,controlsLocked=false,horrorReveal=1,horrorSoundsOn=false;
+let controlsLocked=false,horrorReveal=1,horrorSoundsOn=false;
 let respawnP=0,tdmBotIdx=0;
 const respawnQueue=[];
 let lightStutter=false;
@@ -2263,11 +2410,11 @@ let switching=null,switchSwapped=false,beamOn=false,sparkT=0;
 let rlAnim=null,weaponBloom=0;
 const weaponAmmo=GUNS.map(w=>w.mag);
 function addPoints(n){money+=n;score+=n;}
+let promptDenyT=0;
 function spend(n){
   if(money<n){sfxDeny();promptDenyT=.4;return false;}
   money-=n;return true;
 }
-let promptDenyT=0;
 
 /* ============================================================
    INTERACTIONS
@@ -2442,6 +2589,7 @@ function updatePickups(dt,wdt){
         addPoints(150);announce('+150','SUPPLY CACHE',false,.9);
       }
       sfxPickup2();
+      buzz(15);
       _v1.copy(p.m.position);
       ringFx(_v1,1.2,0xff2418);
     }
@@ -2510,7 +2658,7 @@ function updateCompass(){
 }
 
 /* ============================================================
-   SOLDIERS — rig + animation (one visor declaration, verified)
+   SOLDIERS — rig + animation
    ============================================================ */
 const EGUNS=[
  {id:'PISTOL',  burst:1,gap:.13,cd:[1.7,2.6],spd:15,spread:.05, len:.30,wave:1},
@@ -2560,7 +2708,6 @@ const ESTATS={
 };
 function buildSoldierMesh(type,gunDef,team=1){
   const g=new THREE.Group();
-  /* per-instance material clones so corpses fade independently */
   const cloth=UNI.cloth.clone(),clothD=UNI.clothD.clone(),
         vest=UNI.vest.clone(),helm=UNI.helm.clone(),
         skin=UNI.skin.clone(),boots=UNI.boots.clone();
@@ -2571,7 +2718,6 @@ function buildSoldierMesh(type,gunDef,team=1){
   const mats=[cloth,clothD,vest,helm,skin,boots,visorMat,patchMat];
   const root=new THREE.Group();
   g.add(root);
-  const heavy=type==='heavy';
   const mk=(w,h,d,mat,x,y,z,parent=root)=>{
     const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
     m.position.set(x,y,z);
@@ -2579,7 +2725,6 @@ function buildSoldierMesh(type,gunDef,team=1){
     parent.add(m);
     return m;
   };
-  /* legs: hip on g, thigh -> knee -> boot */
   const mkLeg=(sx)=>{
     const thigh=new THREE.Group();
     thigh.position.set(sx,.92,0);
@@ -2594,7 +2739,6 @@ function buildSoldierMesh(type,gunDef,team=1){
   };
   const LL=mkLeg(-.12),RL=mkLeg(.12);
   mk(.36,.18,.24,clothD,0,.86,0,g);
-  /* torso + kit */
   const torso=new THREE.Mesh(new THREE.CylinderGeometry(.17,.29,.62,5),cloth);
   torso.position.y=1.24;torso.castShadow=true;root.add(torso);
   mk(.42,.44,.3,vest,0,1.28,.02);
@@ -2602,14 +2746,13 @@ function buildSoldierMesh(type,gunDef,team=1){
   mk(.09,.12,.06,clothD,.1,1.22,-.16);
   mk(.34,.4,.14,clothD,0,1.3,.19);
   mk(.16,.1,.05,patchMat,.24,1.44,.05);
-  if(heavy){
+  if(type==='heavy'){
     mk(.14,.3,.08,vest,-.24,1.28,.05);
     mk(.14,.3,.08,vest,.24,1.28,.05);
     mk(.17,.24,.19,vest,-.14,.62,.02,g);
     mk(.17,.24,.19,vest,.14,.62,.02,g);
   }
   mk(.62,.13,.2,cloth,0,1.53,0);
-  /* head + helmet + team visor */
   const headG=new THREE.Group();
   headG.position.set(0,1.62,0);
   root.add(headG);
@@ -2631,7 +2774,6 @@ function buildSoldierMesh(type,gunDef,team=1){
     helmG.remove(dome);helmG.remove(brim);
     mk(.26,.08,.28,helm,0,.26,.01,headG);
   }
-  /* arms: shoulder -> elbow -> glove */
   const mkArm=(sx)=>{
     const up=new THREE.Group();
     up.position.set(sx,1.5,0);
@@ -2796,7 +2938,7 @@ function spawnEnemy(type,pos,idle=false,team=1){
     strafeDir:Math.random()<.5?1:-1,strafeT:rnd(1,3),
     steerSign:Math.random()<.5?1:-1,steerT:rnd(1,2.5),
     wTarget:idle?pickSpawn():null,
-    lungeDir:new THREE.Vector3(),lungeHit:false,tgtBot:null
+    lungeDir:new THREE.Vector3(),lungeHit:false
   });
   if(!idle&&!isTDM()){
     debrisBurst(_v1.copy(P).setY(.5),10,0xff2418,4,.1);
@@ -3084,12 +3226,12 @@ function killEnemy(e,head){
   if(!e.idle&&Math.random()<(e.zombie?.22:.18))dropPickup(e.pos);
   hitmark(true);
   sfxKill();
+  buzz(20);
   const now=performance.now()/1000;
   chain=(now-lastKillT<.9)?chain+1:1;
   lastKillT=now;
   if(chain>=2&&!e.idle)announce(MK[Math.min(chain,4)]||'RAMPAGE','',true,.8);
 }
-/* TDM damage routing */
 function damageHumanTDM(e,dmg,killerTeam,head){
   if(e.hp<=0)return;
   e.hp-=dmg;
@@ -3120,6 +3262,7 @@ function killHumanTDM(e,killerTeam,head){
     bestCombo=Math.max(bestCombo,combo);
     floater('+'+pts+(head?' HEADSHOT':''),_v1,head);
     hitmark(true);sfxKill();
+    buzz(20);
     if(!e.idle&&Math.random()<.18)dropPickup(e.pos);
   }
   killfeedAdd(e.name,head?'HEADSHOT':'DOWN');
@@ -3134,6 +3277,7 @@ function damagePlayer(n,fromPos,melee=false,srcTeam=1){
   vigA=1;
   shake=Math.min(1.4,shake+(melee?.95:.75));
   sfxHurt();
+  buzz(60);
   if(fromPos)showDamageDir(fromPos);
   if(melee)splatScreen();
   if(horrorMode)chromaPulse(120);
@@ -3169,6 +3313,7 @@ function die(){
     state='dead';
     if(document.pointerLockElement)document.exitPointerLock();
     document.body.classList.remove('playing');
+    MOB.showUI=false;syncTouchUI();
     const acc=stats.shots?Math.round(stats.hitShots/stats.shots*100):0;
     $('deathH2').textContent='OVERRUN.';
     $('deathH2').classList.remove('win');
@@ -3191,6 +3336,7 @@ function endMatch(win){
   mouse.down=false;touchState.fire=false;
   if(document.pointerLockElement)document.exitPointerLock();
   document.body.classList.remove('playing');
+  MOB.showUI=false;syncTouchUI();
   focus.active=false;filterFocus(false);
   beamStop();beamMesh.visible=false;beamOn=false;
   const newBest=score>best;
@@ -3211,6 +3357,47 @@ function endMatch(win){
     `<div><b>BEST COMBO</b>×${bestCombo}</div>`;
   $('retryBtn').textContent='Rematch';
   $('deathOv').style.display='flex';
+}
+
+/* ============================================================
+   MOBILE COMBAT AIDS — aim assist + auto-fire
+   ============================================================ */
+function aimAssistDir(ro,baseDir){
+  if(!isMobile()||!settings.aimAssist)return baseDir;
+  if(controlsLocked||TRANS.active)return baseDir;
+  let bestV=null,bestDot=Math.cos(.21); /* ~12° cone */
+  for(const e of enemies){
+    if(e.hp<=0||e.spawnT>.25)continue;
+    if(isTDM()&&e.team===0)continue;
+    _v1.set(e.pos.x-ro.x,e.pos.y+1.15*e.s-ro.y,e.pos.z-ro.z);
+    const d=_v1.length();
+    if(d<1||d>70)continue;
+    _v1.divideScalar(d);
+    const dot=_v1.dot(baseDir);
+    if(dot>bestDot){bestDot=dot;bestV=_v1.clone();}
+  }
+  if(!bestV)return baseDir;
+  const k=settings.aimAssistStr;
+  return new THREE.Vector3().copy(baseDir).multiplyScalar(1-k)
+    .addScaledVector(bestV,k).normalize();
+}
+function autoFireCandidate(){
+  if(!isMobile()||!settings.autoFire)return false;
+  if(controlsLocked||TRANS.active||switching||reloading>0)return false;
+  if(weaponAmmo[wi]<=0)return false;
+  camera.getWorldDirection(_dir);
+  for(const e of enemies){
+    if(e.hp<=0||e.spawnT>.25)continue;
+    if(isTDM()&&e.team===0)continue;
+    _v1.set(e.pos.x-camera.position.x,
+      e.pos.y+1.15*e.s-camera.position.y,
+      e.pos.z-camera.position.z);
+    const d=_v1.length();
+    if(d>45)continue;
+    _v1.divideScalar(d);
+    if(_v1.dot(_dir)>.975)return true; /* ~13° */
+  }
+  return false;
 }
 
 /* ============================================================
@@ -3273,6 +3460,7 @@ function fireOne(w){
   fovK=Math.min(5,fovK+w.kick*1.1);
   crossPulse=1;
   stats.shots++;
+  buzz(8);
   sfxShot(w.id);
   if(w.launcher)fireNade(w);
   else hitscan(w);
@@ -3285,6 +3473,8 @@ function fireOne(w){
 function hitscan(w){
   const ro=camera.position;
   camera.getWorldDirection(_dir);
+  /* mobile aim assist — one assisted base direction per trigger pull */
+  const adir=aimAssistDir(ro,_dir);
   const m=camera.matrixWorld.elements;
   _r.set(m[0],m[1],m[2]);
   _u.set(m[4],m[5],m[6]);
@@ -3293,7 +3483,7 @@ function hitscan(w){
   for(let p=0;p<w.pellets;p++){
     const a=rnd(Math.PI*2);
     const rr=Math.sqrt(Math.random())*spread;
-    _d2.copy(_dir)
+    _d2.copy(adir)
       .addScaledVector(_r,Math.cos(a)*rr)
       .addScaledVector(_u,Math.sin(a)*rr)
       .normalize();
@@ -3495,9 +3685,9 @@ function updateWeapon(dt){
     }
     if(reloading<=0)endReloadFx();
   }
+  const held=mouse.down||touchState.fire||autoFireCandidate();
   if(w.spinup){
-    wspin=clamp(wspin+(((mouse.down||touchState.fire)&&!switching&&
-      weaponAmmo[wi]>0)?dt*2.6:-dt*3),0,1);
+    wspin=clamp(wspin+((held&&!switching&&weaponAmmo[wi]>0)?dt*2.6:-dt*3),0,1);
   }
   const spin=gunViews[wi].g.userData.spin;
   if(spin)spin.rotation.z+=wspin*dt*40;
@@ -3507,7 +3697,8 @@ function updateWeapon(dt){
     fireOne(w);burstLeft--;bCd=w.bDelay;
     return;
   }
-  const wantFire=w.auto?(mouse.down||touchState.fire):mouse.edge;
+  /* on mobile every gun is hold-to-fire (no click-per-shot) */
+  const wantFire=isMobile()?held:(w.auto?held:mouse.edge);
   if(wantFire&&cd<=0){
     if(weaponAmmo[wi]<=0){
       if(mouse.edge){sfxEmpty();startReload();}
@@ -3536,7 +3727,7 @@ function cycleWeapon(dir){
 }
 
 /* ============================================================
-   BOT SHOOTING + BULLETS (team-tagged)
+   BOT SHOOTING + BULLETS
    ============================================================ */
 function eShoot(e,tx,ty,tz){
   const g=e.gun,s=e.s;
@@ -3866,12 +4057,10 @@ function updateEnemies(wdt){
       continue;
     }
     e.group.scale.setScalar(e.s);
-    /* hit flash on the uniform */
     e.flash*=Math.exp(-8*wdt);
     e.mats[0].emissive.setRGB(e.flash*.45,e.flash*.08,e.flash*.04);
     e.mCd-=wdt;e.steerT-=wdt;
     if(e.steerT<=0){e.steerSign*=-1;e.steerT=rnd(1,2.4);}
-    /* pick target */
     let tx,tz,teye,tAlive=false,tIsPlayer=false,eTgtBot=null;
     if(tdm){
       let tgt=null,bd=1e9;
@@ -4266,6 +4455,13 @@ GUNS.forEach((w,i)=>{
   const d=document.createElement('div');
   d.className='slot';
   d.innerHTML=`<span class="k">${w.key}</span><span class="c">${w.code}</span>`;
+  /* mobile: tap a slot to switch weapons */
+  d.addEventListener('pointerdown',ev=>{
+    if(!isMobile())return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    selectWeapon(i);
+  });
   stripEl.appendChild(d);
   slots.push(d);
 });
@@ -4306,7 +4502,7 @@ function updateHUD(dt){
     $('roundTxt').classList.toggle('danger',left>30||(horrorMode&&round>=6));
     if(interT>0&&interT<90&&player.alive)
       setTxt('interTxt','NEXT ROUND IN '+Math.ceil(interT));
-    else if(!isTDM())setTxt('interTxt','');
+    else setTxt('interTxt','');
   }
   const ff=$('focusFill');
   ff.style.width=focus.meter+'%';
@@ -4344,6 +4540,16 @@ function updateHUD(dt){
     pr.dataset.k='';
   }
   updateCompass();
+  /* mobile button states */
+  if(isMobile()){
+    $('tbUse').classList.toggle('pulse',!!interactTarget);
+    $('tbReload').classList.toggle('pulse',
+      am===0&&reloading<=0&&!w.beam);
+    $('tbFocus').style.opacity=focus.locked?.35:1;
+    const jr=$('joyRing');
+    const tmag=Math.hypot(touchState.mx,touchState.my);
+    jr.style.opacity=tmag>.92?1:0;
+  }
 }
 const GLYPHS='▓▒░█@#%&$?!/\\';
 let hudCorruptTimer=null;
@@ -4382,7 +4588,7 @@ const TRANS={
 };
 function E(t,fn){TRANS.events.push({t,fn,fired:false});}
 function beginCorruptionTransition(bonusTxt){
-  TRANS.events=[]; /* fresh timeline each playthrough */
+  TRANS.events=[];
   TRANS.active=true;TRANS.t=0;TRANS.done=false;
   TRANS.freeze=true;controlsLocked=true;
   TRANS.rapid=false;
@@ -4408,6 +4614,7 @@ function beginCorruptionTransition(bonusTxt){
     TRANS.rapid=true;TRANS.nextSwitch=0;
     $('hud').style.display='none';
     stopHudGlitch();shake=1;
+    MOB.showUI=false;syncTouchUI();
   });
   E(5.4,()=>{fragmentFlash(16,.09);tear();});
   E(6.3,()=>{
@@ -4426,6 +4633,8 @@ function beginCorruptionTransition(bonusTxt){
     $('hud').style.display='';
     horrorSoundsOn=true;horrorReveal=0;
     interT=1.6;
+    MOB.showUI=true;syncTouchUI();
+    updateRotateHint();
   });
 }
 function fragmentFlash(n,dur){
@@ -4484,7 +4693,7 @@ function applyHorrorPresentation(){
   sun.intensity=SUN_DARK;
   sun.color.setHex(0x9aa2b0);
   renderer.toneMappingExposure=EXPOSE_DARK*settings.bright;
-  renderer.setPixelRatio(HORROR_PR);
+  renderer.setPixelRatio(HORROR_PR());
   canvas.classList.add('oldlook');
   canvas.style.filter=OLDFILTER;
   playerLight.intensity=.55;
@@ -4651,12 +4860,18 @@ function updatePlayer(dt){
   if(kd('back')){wx-=F.x;wz-=F.z}
   if(kd('right')){wx+=R.x;wz+=R.z}
   if(kd('left')){wx-=R.x;wz-=R.z}
-  if(touchState.mx||touchState.my){
+  const touchActive=!!(touchState.mx||touchState.my);
+  if(touchActive){
     wx+=F.x*touchState.my+R.x*touchState.mx;
     wz+=F.z*touchState.my+R.z*touchState.mx;
   }
   const wl=Math.hypot(wx,wz);
   if(wl>0){wx/=wl;wz/=wl;}
+  /* analog joystick: partial tilt = partial speed */
+  if(touchActive){
+    const mag=Math.min(1,Math.hypot(touchState.mx,touchState.my)*1.15);
+    wx*=mag;wz*=mag;
+  }
   player.dashCd-=dt;
   player.inv-=dt;
   player.slideCd-=dt;
@@ -4771,6 +4986,7 @@ function tryDash(){
   player.vel.z+=dz*13;
   fovK=Math.min(8,fovK+6);
   sfxDash();
+  buzz(12);
 }
 function applyCamera(dt){
   recoilP*=Math.exp(-dt*9);
@@ -4863,88 +5079,110 @@ function updateTimeScale(dt){
 }
 
 /* ============================================================
-   TOUCH CONTROLS — bound once, only visible on mobile
+   MOBILE INPUT — Pointer Events (touch AND mouse unified)
+   Every control tracks its own pointerId, so move + look + fire
+   all work simultaneously. Joystick is analog, tap-to-shoot and
+   double-tap-dash gestures included. Also works with a mouse on
+   desktop when TOUCH mode is forced — handy for testing.
    ============================================================ */
 function bindHold(el,onDown,onUp){
   if(!el)return;
   const down=ev=>{
     ev.preventDefault();
+    ev.stopPropagation();
     el.classList.add('held');
     if(onDown)onDown();
   };
-  const up=()=>{
+  const up=ev=>{
     el.classList.remove('held');
     if(onUp)onUp();
   };
-  el.addEventListener('touchstart',down,{passive:false});
-  el.addEventListener('touchend',up);
-  el.addEventListener('touchcancel',up);
+  el.addEventListener('pointerdown',down);
+  el.addEventListener('pointerup',up);
+  el.addEventListener('pointercancel',up);
+  el.addEventListener('pointerleave',up);
 }
 function initTouch(){
-  const joyBase=$('joyBase'),joyKnob=$('joyKnob');
+  const joyBase=$('joyBase'),joyKnob=$('joyKnob'),joyRing=$('joyRing');
   const joyZone=$('joyZone'),lookZone=$('lookZone');
-  let joyId=null,joyCX=0,joyCY=0;
-  joyZone.addEventListener('touchstart',ev=>{
+
+  /* ---- joystick ---- */
+  let joyCX=0,joyCY=0;
+  joyZone.addEventListener('pointerdown',ev=>{
     ev.preventDefault();
-    const t=ev.changedTouches[0];
-    joyId=t.identifier;
-    joyCX=t.clientX;joyCY=t.clientY;
+    if(MOB.joyId!==null)return;
+    MOB.joyId=ev.pointerId;
+    joyCX=ev.clientX;joyCY=ev.clientY;
     joyBase.style.display='block';
-    joyBase.style.left=(joyCX-59)+'px';
-    joyBase.style.top=(joyCY-59)+'px';
-  },{passive:false});
-  joyZone.addEventListener('touchmove',ev=>{
-    for(const t of ev.changedTouches){
-      if(t.identifier!==joyId)continue;
-      ev.preventDefault();
-      let dx=t.clientX-joyCX,dy=t.clientY-joyCY;
-      const l=Math.hypot(dx,dy);
-      const max=52;
-      if(l>max){dx=dx/l*max;dy=dy/l*max;}
-      joyKnob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;
-      touchState.mx=dx/max;
-      touchState.my=-dy/max;
-    }
-  },{passive:false});
+    joyBase.style.left=(joyCX-62)+'px';
+    joyBase.style.top=(joyCY-62)+'px';
+    joyKnob.style.transform='translate(-50%,-50%)';
+  });
+  joyZone.addEventListener('pointermove',ev=>{
+    if(ev.pointerId!==MOB.joyId)return;
+    ev.preventDefault();
+    let dx=ev.clientX-joyCX,dy=ev.clientY-joyCY;
+    const l=Math.hypot(dx,dy);
+    const max=54;
+    if(l>max){dx=dx/l*max;dy=dy/l*max;}
+    joyKnob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;
+    touchState.mx=dx/max;
+    touchState.my=-dy/max;
+    joyRing.style.opacity=Math.hypot(touchState.mx,touchState.my)>.92?1:0;
+  });
   const joyEnd=ev=>{
-    for(const t of ev.changedTouches){
-      if(t.identifier!==joyId)continue;
-      joyId=null;
-      touchState.mx=0;touchState.my=0;
-      joyBase.style.display='none';
-      joyKnob.style.transform='translate(-50%,-50%)';
-    }
+    if(ev.pointerId!==MOB.joyId)return;
+    /* double-tap on the move zone = dash */
+    const now=performance.now();
+    if(now-MOB.lastLeftTap<300&&MOB.tapMoved<12)tryDash();
+    if(MOB.tapMoved<12)MOB.lastLeftTap=now;
+    MOB.joyId=null;
+    touchState.mx=0;touchState.my=0;
+    joyBase.style.display='none';
+    joyRing.style.opacity=0;
   };
-  joyZone.addEventListener('touchend',joyEnd);
-  joyZone.addEventListener('touchcancel',joyEnd);
-  let lookId=null,lx=0,ly=0;
-  lookZone.addEventListener('touchstart',ev=>{
-    const t=ev.changedTouches[0];
-    if(lookId===null){
-      lookId=t.identifier;
-      lx=t.clientX;ly=t.clientY;
-    }
-  },{passive:false});
-  lookZone.addEventListener('touchmove',ev=>{
-    for(const t of ev.changedTouches){
-      if(t.identifier!==lookId)continue;
-      ev.preventDefault();
-      const k=.006*settings.sens;
-      player.yaw-=(t.clientX-lx)*k;
-      player.pitch=clamp(player.pitch+
-        (settings.invertY?1:-1)*-(t.clientY-ly)*k,-1.45,1.45);
-      lx=t.clientX;ly=t.clientY;
-    }
-  },{passive:false});
+  joyZone.addEventListener('pointerup',joyEnd);
+  joyZone.addEventListener('pointercancel',joyEnd);
+
+  /* ---- look zone ---- */
+  let lx=0,ly=0;
+  lookZone.addEventListener('pointerdown',ev=>{
+    ev.preventDefault();
+    if(MOB.lookId!==null)return;
+    MOB.lookId=ev.pointerId;
+    lx=ev.clientX;ly=ev.clientY;
+    MOB.tapT=performance.now();
+    MOB.tapX=lx;MOB.tapY=ly;
+    MOB.tapMoved=0;
+  });
+  lookZone.addEventListener('pointermove',ev=>{
+    if(ev.pointerId!==MOB.lookId)return;
+    ev.preventDefault();
+    const ddx=ev.clientX-lx,ddy=ev.clientY-ly;
+    MOB.tapMoved+=Math.abs(ddx)+Math.abs(ddy);
+    const k=.0055*settings.sens;
+    player.yaw-=ddx*k;
+    player.pitch=clamp(player.pitch+
+      (settings.invertY?1:-1)*-ddy*k,-1.45,1.45);
+    lx=ev.clientX;ly=ev.clientY;
+  });
   const lookEnd=ev=>{
-    for(const t of ev.changedTouches){
-      if(t.identifier===lookId)lookId=null;
+    if(ev.pointerId!==MOB.lookId)return;
+    MOB.lookId=null;
+    /* tap-to-shoot: quick touch, barely moved */
+    const dt2=performance.now()-MOB.tapT;
+    if(settings.tapShoot&&dt2<250&&MOB.tapMoved<14){
+      mouse.edge=true; /* one trigger pull */
     }
   };
-  lookZone.addEventListener('touchend',lookEnd);
-  lookZone.addEventListener('touchcancel',lookEnd);
-  bindHold($('tbFire'),()=>{touchState.fire=true;mouse.edge=true;},
-    ()=>{touchState.fire=false;});
+  lookZone.addEventListener('pointerup',lookEnd);
+  lookZone.addEventListener('pointercancel',lookEnd);
+
+  /* ---- buttons ---- */
+  bindHold($('tbFire'),()=>{
+    touchState.fire=true;
+    mouse.edge=true;
+  },()=>{touchState.fire=false;});
   bindHold($('tbFocus'),()=>{touchState.focus=true;},()=>{touchState.focus=false;});
   bindHold($('tbJump'),()=>{keys.__jump=true;},null);
   bindHold($('tbSlide'),()=>{
@@ -4956,8 +5194,38 @@ function initTouch(){
   bindHold($('tbUse'),()=>{tryInteract();},null);
   bindHold($('tbPrev'),()=>{cycleWeapon(-1);},null);
   bindHold($('tbNext'),()=>{cycleWeapon(1);},null);
+
+  /* block browser gestures while playing */
+  document.addEventListener('touchmove',ev=>{
+    if(state==='playing')ev.preventDefault();
+  },{passive:false});
+  document.addEventListener('gesturestart',ev=>ev.preventDefault());
 }
 initTouch();
+
+/* adaptive performance: drop resolution if the phone is struggling */
+const ADAPT={acc:0,frames:0,cool:0};
+function adaptPerf(dt){
+  if(!isMobile())return;
+  ADAPT.acc+=dt;
+  ADAPT.frames++;
+  if(ADAPT.acc<3)return;
+  const fps=ADAPT.frames/ADAPT.acc;
+  ADAPT.acc=0;ADAPT.frames=0;
+  if(ADAPT.cool>0){ADAPT.cool--;return;}
+  if(fps<26&&MOB.pr>.6){
+    MOB.pr=Math.max(.6,MOB.pr-.15);
+    renderer.setPixelRatio(horrorMode?HORROR_PR():MOB.pr);
+    ADAPT.cool=2;
+  }
+}
+
+/* auto-pause when the tab/app goes to background */
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden&&state==='playing'&&!paused&&player.alive&&!TRANS.active){
+    openPause();
+  }
+});
 
 /* ============================================================
    PAUSE / MENU EXIT
@@ -4965,10 +5233,11 @@ initTouch();
 function openPause(){
   if(state!=='playing'||paused||!player.alive)return;
   paused=true;
-  mouse.down=false;touchState.fire=false;
+  mouse.down=false;touchState.fire=false;touchState.focus=false;
   keys={};
   focus.active=false;filterFocus(false);
   beamStop();beamMesh.visible=false;beamOn=false;
+  MOB.showUI=false;syncTouchUI();
   updatePauseStats();
   $('pauseOv').style.display='flex';
   if(document.pointerLockElement)document.exitPointerLock();
@@ -4988,23 +5257,22 @@ function updatePauseStats(){
     `<div><b>MODE</b>${modeName()}${horrorMode?' · ARCHIVE':''}</div>`;
   $('pstats').innerHTML=s;
 }
- $('resumeBtn').addEventListener('click',()=>{
+function resumeFromPause(){
   $('pauseOv').style.display='none';
   paused=false;
+  MOB.showUI=true;syncTouchUI();
   if(!isMobile())lock();
-});
+}
+ $('resumeBtn').addEventListener('click',resumeFromPause);
  $('pauseOv').addEventListener('click',e=>{
   if(e.target.closest('button'))return;
-  if(!isMobile())lock();
+  resumeFromPause();
 });
  $('pauseExit').addEventListener('click',exitToMenu);
  $('deathExit').addEventListener('click',exitToMenu);
  $('pauseBtn').addEventListener('click',()=>{
-  if(paused){
-    $('pauseOv').style.display='none';
-    paused=false;
-    if(!isMobile())lock();
-  }else openPause();
+  if(paused)resumeFromPause();
+  else openPause();
 });
 
 /* ============================================================
@@ -5088,14 +5356,14 @@ function buildSettingsUI(){
     row.appendChild(lab);row.appendChild(t);
     ol.appendChild(row);
   };
-  /* control-mode selector: AUTO / DESKTOP / TOUCH */
+  /* control mode selector + live detection readout */
   {
     mkH('Controls');
     const row=document.createElement('div');
     row.className='srow';
     const lab=document.createElement('span');
     lab.className='sl';
-    lab.textContent='Control Mode (auto detects mobile)';
+    lab.textContent='Control Mode';
     const grp=document.createElement('div');
     grp.className='mode3';
     for(const[val,txt]of[['auto','AUTO'],['desktop','DESKTOP'],['touch','TOUCH']]){
@@ -5108,13 +5376,28 @@ function buildSettingsUI(){
         grp.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
         b.classList.add('on');
         applyControlMode();
+        refreshCtrlText();
+        const info=document.getElementById('detectInfo');
+        if(info)info.textContent=
+          `DETECTED: ${DETECTED_MOBILE?'MOBILE':'DESKTOP'} · ACTIVE: ${isMobile()?'TOUCH':'DESKTOP'}`;
       });
       grp.appendChild(b);
     }
     row.appendChild(lab);
     row.appendChild(grp);
     ol.appendChild(row);
+    const info=document.createElement('div');
+    info.id='detectInfo';
+    info.textContent=
+      `DETECTED: ${DETECTED_MOBILE?'MOBILE':'DESKTOP'} · ACTIVE: ${isMobile()?'TOUCH':'DESKTOP'}`;
+    ol.appendChild(info);
   }
+  mkH('Mobile Aim');
+  mkTog('aimAssist','Aim Assist (Touch)');
+  mkRange('aimAssistStr','Assist Strength',.1,.8,.05,v=>Math.round(v*100)+'%');
+  mkTog('autoFire','Auto-Fire On Target (Touch)');
+  mkTog('tapShoot','Tap Screen To Shoot');
+  mkTog('haptics','Vibration Feedback');
   mkH('Gameplay');
   mkRange('sens','Sensitivity (mouse + touch)',.1,3,.05,v=>v.toFixed(2));
   mkTog('invertY','Invert Y Axis');
@@ -5155,9 +5438,10 @@ document.addEventListener('keydown',e=>{
 function refreshCtrlText(){
   if(isMobile()){
     $('ctrls').innerHTML=
-      `<b>LEFT PAD</b> move · <b>DRAG RIGHT</b> look<br>`+
-      `<b>ON-SCREEN</b> fire / jump / slide / dash / focus<br>`+
-      `<b>☰</b> pause &amp; exit to menu`;
+      `<b>LEFT SIDE</b> touch &amp; drag — move (double-tap = dash)<br>`+
+      `<b>RIGHT SIDE</b> drag — look · quick tap — shoot<br>`+
+      `<b>BUTTONS</b> fire / jump / slide / dash / focus / rld / use<br>`+
+      `<b>TAP GUN SLOTS</b> to switch · <b>☰</b> pause &amp; exit`;
   }else{
     const K=keyName;
     $('ctrls').innerHTML=
@@ -5308,6 +5592,7 @@ document.addEventListener('pointerlockchange',()=>{
   }else if(locked&&paused){
     paused=false;
     $('pauseOv').style.display='none';
+    MOB.showUI=true;syncTouchUI();
   }
 });
 document.addEventListener('mousemove',e=>{
@@ -5415,7 +5700,7 @@ function restoreNormalPresentation(){
   TRANS.freeze=false;TRANS.rapid=false;
   controlsLocked=false;
   horrorSoundsOn=false;horrorReveal=1;
-  renderer.setPixelRatio(NORMAL_PR);
+  renderer.setPixelRatio(NORMAL_PR());
   canvas.classList.remove('oldlook');
   canvas.style.filter='';
   canvas.style.opacity=1;
@@ -5438,6 +5723,7 @@ function exitToMenu(){
   restoreNormalPresentation();
   clearWorld();
   document.body.classList.remove('playing');
+  MOB.showUI=false;syncTouchUI();
   $('hud').classList.remove('on');
   $('pauseOv').style.display='none';
   $('deathOv').style.display='none';
@@ -5514,20 +5800,28 @@ function resetGame(){
   $('newBest').style.display='none';
   $('hud').classList.add('on');
   document.body.classList.add('playing');
+  /* mobile: show controls + go fullscreen/landscape */
+  MOB.showUI=true;
+  syncTouchUI();
+  updateRotateHint();
 }
 function startGame(){
   initAudio();
+  tryFullscreenOrient();
   resetGame();
   state='playing';
   paused=false;
   lock();
+  updateRotateHint();
 }
 function restart(){
   initAudio();
+  tryFullscreenOrient();
   resetGame();
   state='playing';
   paused=false;
   lock();
+  updateRotateHint();
 }
  $('startBtn').addEventListener('click',startGame);
  $('retryBtn').addEventListener('click',restart);
@@ -5535,6 +5829,7 @@ function restart(){
 /* ============================================================
    BOOT
    ============================================================ */
+applyControlMode();
 buildAll(mapIdx);
 openAllMenuZones();
 for(let i=0;i<3;i++)spawnEnemy('shooter',pickSpawn(),true,1);
@@ -5555,6 +5850,7 @@ function tick(){
   const dt=Math.min(clock.getDelta(),.05);
   window.__relic.rotation.y+=dt*.25;
   updateFlags(clock.elapsedTime);
+  adaptPerf(dt);
   if(decayK!==decayTarget){
     const step=dt*decayRate;
     decayK+=clamp(decayTarget-decayK,-step,step);

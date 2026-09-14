@@ -1544,6 +1544,7 @@ const MODES=[
  {id:'original',name:'ORIGINAL',desc:'PURE GUNPLAY · HUMAN SOLDIERS · BRIGHT ARENA'},
  {id:'break',name:'THE BREAK',desc:'5 CLEAN ROUNDS · THEN THE GAME CORRUPTS'},
  {id:'archive',name:'ARCHIVE',desc:'START INSIDE THE OLD MAP · DEAD FROM ROUND 1'},
+ {id:'solo',name:'SOLO ZOMBIES',desc:'FROSTLINE TRANSIT · BUS LOOP · BUILD YOUR RUN'},
  {id:'tdm',name:'TEAM STRIKE',desc:'YOUR SQUAD VS THEIRS · FIRST TO THE KILL TARGET'},
  {id:'dom',name:'DOMINATION',desc:'CAPTURE A/B/C · DRAIN THEIR TICKETS · BATTLEFIELD ONLY'},
  {id:'coop',name:'ZOMBIES CO-OP',desc:'UP TO 3 PLAYERS · SHARED HORDE · REVIVE OR DIE TOGETHER'},
@@ -1666,6 +1667,16 @@ const MAPS=[
   [42,-30,1.3],[-42,-8,1.1],[-20,-32,1.2],[26,-42,1],[-4,-14,.9],[8,24,1]],
  doors:[],
  wallbuys:[{x:0,z:57.2,gun:'VECTOR'},{x:57.2,z:0,gun:'SWEEPER'},{x:-57.2,z:-20,gun:'THUMPER'}]},
+
+{id:'frostline',name:'FROSTLINE TRANSIT',sub:'FOG BELT · BUS LOOP · SOLO HORDE · 120m',
+ half:60,bg:0x53606a,spawn:[0,50],yaw:Math.PI,relic:[0,8,0],box:{x:-46,z:-44},
+ busRoute:[[-48,48],[48,48],[48,-48],[-48,-48]],
+ dividers:[[-32,15,2,42,3.5],[32,-15,2,42,3.5],[0,0,38,2,3]],
+ covers:[[-42,30,5,3,2.2],[-18,38,7,3,2],[18,38,7,3,2],[42,22,4,5,2.4],
+  [-42,-22,4,5,2.4],[-18,-38,7,3,2],[18,-38,7,3,2.2],[42,-30,5,3,2.2],
+  [-12,8,4,3,2],[12,-8,4,3,2]],
+ doors:[{x:0,z:25,rot:0,w:8,cost:900,name:'NORTH TERMINAL',zone:[-60,25,60,60]}],
+ wallbuys:[{x:-56,z:0,gun:'VECTOR'},{x:56,z:0,gun:'SWEEPER'},{x:0,z:-56,gun:'LONGSHOT'}]},
 ];
 
 /* ============ WEAPONS / MODS ============ */
@@ -1856,6 +1867,7 @@ let fragCd=0;
 let decals=[],mortars=[];
 const pu={insta:0,dbl:0};
 const dom={active:false,tickets:[200,200],capT:0,flags:[]};
+const busState={g:null,route:null,seg:0,t:0,speed:7,lastX:0,lastZ:0};
 const player={
   pos:new THREE.Vector3(),vel:new THREE.Vector3(),yaw:0,pitch:0,
   eye:1.62,eyeCur:1.62,onGround:true,hp:100,maxHp:100,regenT:0,
@@ -1884,7 +1896,11 @@ async function refreshLobbies(){
   el.textContent='SEARCHING FOR OPEN LOBBIES…';
   try{
     const r=await fetch(LOBBY_API.replace(/\/$/,'')+'/rooms',{cache:'no-store'});
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    if(!r.ok){
+      let detail='HTTP '+r.status;
+      try{const info=await r.json();if(info.error)detail+=' · '+info.error;}catch(e){}
+      throw new Error(detail);
+    }
     const rooms=await r.json();
     el.innerHTML='';
     if(!rooms.length){el.textContent='NO OPEN LOBBIES';return;}
@@ -1895,7 +1911,7 @@ async function refreshLobbies(){
       b.onclick=()=>netJoin(room.peerId);
       el.appendChild(b);
     });
-  }catch(e){el.textContent='LOBBY SERVER UNAVAILABLE · TRY REFRESH';}
+  }catch(e){el.textContent='LOBBY ERROR · '+(e.message||'TRY REFRESH');}
 }
 async function lobbyRegister(){
   if(!LOBBY_API||!NET.peer?.id)return;
@@ -2810,7 +2826,8 @@ function tryFire(){
   muzzleFlash(E.flash);
   ejectShell();
   puffSmoke(MUZ);
-  camera.getWorldDirection(RAY_D);
+  camera.updateMatrixWorld(true);
+  RAY_D.set(0,0,-1).applyQuaternion(camera.quaternion).normalize();
   RAY_O.copy(camera.position);
   RAY_U.set(0,1,0);
   RAY_R.crossVectors(RAY_D,RAY_U).normalize();
@@ -4416,6 +4433,50 @@ function placeStations(){
   }
 }
 
+function buildTransitBus(route){
+  if(!route||route.length<2)return;
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(2.4,2.2,7.2),MAT.machine);
+  body.position.y=1.35;g.add(body);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(2.5,.18,7.3),MAT.gunRed);
+  roof.position.y=2.5;g.add(roof);
+  for(const z of[-2.3,-.8,.8,2.3]){
+    for(const x of[-1.22,1.22]){
+      const win=new THREE.Mesh(new THREE.BoxGeometry(.03,.65,1),
+        new THREE.MeshStandardMaterial({color:0x182733,roughness:.12,metalness:.7}));
+      win.position.set(x,1.65,z);g.add(win);
+    }
+  }
+  for(const x of[-1,1])for(const z of[-2.35,2.35]){
+    const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.38,.38,.22,12),MAT.gunDark);
+    wheel.rotation.z=Math.PI/2;wheel.position.set(x,0.42,z);g.add(wheel);
+  }
+  const sign=new THREE.Mesh(new THREE.BoxGeometry(1.4,.35,.04),MAT.glowRed);
+  sign.position.set(0,2.05,-3.64);g.add(sign);
+  const p=route[0],n=route[1];
+  g.position.set(p[0],0,p[1]);
+  g.rotation.y=Math.atan2(n[0]-p[0],n[1]-p[1]);
+  worldClean.add(g);
+  busState.g=g;busState.route=route;busState.seg=0;busState.t=0;
+  busState.lastX=p[0];busState.lastZ=p[1];
+}
+function updateTransitBus(dt){
+  if(!busState.g||!busState.route)return;
+  const route=busState.route,a=route[busState.seg],b=route[(busState.seg+1)%route.length];
+  const len=Math.max(.1,Math.hypot(b[0]-a[0],b[1]-a[1]));
+  busState.t+=dt*busState.speed/len;
+  if(busState.t>=1){busState.t=0;busState.seg=(busState.seg+1)%route.length;}
+  const na=route[busState.seg],nb=route[(busState.seg+1)%route.length];
+  const x=na[0]+(nb[0]-na[0])*busState.t,z=na[1]+(nb[1]-na[1])*busState.t;
+  const dx=x-busState.lastX,dz=z-busState.lastZ;
+  busState.g.position.set(x,0,z);
+  busState.g.rotation.y=Math.atan2(nb[0]-na[0],nb[1]-na[1]);
+  if(state==='playing'&&Math.hypot(player.pos.x-x,player.pos.z-z)<3.6){
+    player.pos.x+=dx;player.pos.z+=dz;
+  }
+  busState.lastX=x;busState.lastZ=z;
+}
+
 /* ============ WORLD BUILD ============ */
 function buildDoorMesh(d){
   const g=new THREE.Group();
@@ -4529,6 +4590,10 @@ function buildWorld(){
   boxState={rolling:false,offered:null,timer:0};
   interactables.push({type:'box',x:bx,z:bz,cost:950,label:'MYSTERY BOX'});
   placeStations();
+  if(map.busRoute){
+    buildTransitBus(map.busRoute);
+    busState.g.traverse(o=>keepDyn.add(o));
+  }
   {
     const S=H-5,spots=[];
     let guard=0;
@@ -4603,6 +4668,7 @@ function disposeWorld(){
     });
   }
   worldClean=null;worldAncient=null;
+  busState.g=null;busState.route=null;busState.seg=0;busState.t=0;
   enemies.forEach(releaseEnemyMesh);
   enemies=[];
   if(boxRollMesh){scene.remove(boxRollMesh);boxRollMesh=null;}
@@ -5229,6 +5295,7 @@ function updatePlayer(dt,rdt){
     player.pitch+player.recP+rnd(-sh,sh)*.03,
     player.yaw+rnd(-sh,sh)*.03,
     -player.slideLean*.09);
+  camera.updateMatrixWorld(true);
   const aT=player.adsT;
   const w=inv[curW];
   const zoom=w?effStats(w).zoom:1.35;
@@ -6006,6 +6073,10 @@ function buildMenu(){
     b.innerHTML=`<h4>${m.name}</h4><p>${m.desc}</p><span class="sel">◆ SELECTED</span>`;
     b.onclick=()=>{
       selMode=m.id;
+      if(m.id==='solo'){
+        const transit=MAPS.findIndex(x=>x.id==='frostline');
+        if(transit>=0)selMap=transit;
+      }
       mr.querySelectorAll('.mapCard').forEach(x=>x.classList.remove('on'));
       b.classList.add('on');
       $('tdmCfg').style.display=(m.id==='tdm'||m.id==='dom')?'block':'none';
@@ -6253,6 +6324,7 @@ function frame(){
     updateTurrets(sdt);
     updateMortars(sdt);
     updateBox(sdt);
+    updateTransitBus(sdt);
     updateInteract();
     updateCoop(rdt);
     director(sdt);

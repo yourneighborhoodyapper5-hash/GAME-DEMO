@@ -4709,6 +4709,7 @@ function pollPad(rdt){
   PAD.mx=padShape(gp.axes[0]||0,settings.padDeadL,1.4);
   PAD.my=-padShape(gp.axes[1]||0,settings.padDeadL,1.4);
   PAD.fire=padBtn(gp,padi('fire'));
+  if(PAD.fire&&!prev[padi('fire')])fireQueued=true;
   PAD.ads=padBtn(gp,padi('ads'));
   const jp=i=>padBtn(gp,i)&&!prev[i];
   if(jp(padi('jump')))player.jumpBuf=.14;

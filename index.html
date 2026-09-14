@@ -28,6 +28,8 @@
     font-family:'IBM Plex Mono',monospace;color:var(--ink);user-select:none;
     -webkit-user-select:none;touch-action:none;overscroll-behavior:none}
   canvas{position:fixed;inset:0;z-index:0;display:block}
+  #pvCv{position:static;inset:auto;width:250px;height:240px;z-index:auto;cursor:grab}
+  #pvCv:active{cursor:grabbing}
   canvas.oldlook{filter:saturate(.62) contrast(1.12) brightness(.92)}
   .padFocus{outline:3px solid #ff2418!important;outline-offset:2px;
     box-shadow:0 0 0 4px rgba(255,36,24,.35)!important}
@@ -340,6 +342,10 @@
     display:flex;flex-direction:column}
   #shopHead{display:flex;justify-content:space-between;align-items:center;
     padding:14px 24px;border-bottom:2px solid var(--ink)}
+  #shopActions{display:flex;gap:6px;align-items:center;margin-left:auto;margin-right:14px}
+  #shopActions button{font:700 10px 'IBM Plex Mono',monospace;border:1.5px solid var(--ink);
+    background:transparent;color:var(--ink);padding:7px 9px;cursor:pointer;letter-spacing:.08em}
+  #shopActions button:hover{background:var(--ink);color:var(--paper)}
   #shopHead h2{font-family:'Archivo Black',sans-serif;font-size:24px}
   #shopGun{font-size:12px;font-weight:700;letter-spacing:.2em;color:var(--red);margin-left:18px}
   #shopBody{display:flex;overflow:auto;position:relative}
@@ -354,6 +360,14 @@
     border-right:1px solid rgba(17,17,22,.15)}
   #pvLbl{font-size:9px;letter-spacing:.3em;color:#8f8a7c;padding:8px 0;font-weight:700}
   #shopMods{flex:1;padding:14px 20px 20px;overflow:auto;min-width:320px}
+  #arsenal{margin-bottom:18px;padding-bottom:14px;border-bottom:2px solid var(--ink)}
+  #arsenal h3{font-size:10px;letter-spacing:.3em;color:var(--red);margin-bottom:8px}
+  #arsenalGrid{display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:5px}
+  .arsenalBtn{border:1.5px solid var(--ink);background:transparent;color:var(--ink);
+    padding:7px 8px;text-align:left;font:700 10px 'IBM Plex Mono',monospace;cursor:pointer}
+  .arsenalBtn span{display:block;font-size:9px;opacity:.55;margin-top:2px}
+  .arsenalBtn:hover,.arsenalBtn.eq{background:var(--red);border-color:var(--red);color:#fff}
+  .arsenalBtn.cant{opacity:.38;cursor:default}
   .modSlot{margin-bottom:14px}
   .modSlotHead{font-size:10px;letter-spacing:.3em;color:var(--red);font-weight:700;
     margin-bottom:5px}
@@ -588,6 +602,10 @@
         <h2>GUNSMITH</h2>
         <span id="shopGun">—</span>
       </div>
+      <div id="shopActions">
+        <button id="saveLoadout">SAVE LOADOUT</button>
+        <button id="loadLoadout">LOAD LOADOUT</button>
+      </div>
       <button id="shopClose" class="btnGhost">Done [ESC]</button>
     </div>
     <div id="shopBody">
@@ -767,6 +785,10 @@ function keyName(c){
   return m[c]||c.replace('Key','').replace('Digit','').replace('Arrow','').toUpperCase();
 }
 const kd=a=>{const c=settings.binds[a];return c?!!keys[c]:false;};
+function actionLabel(id){
+  if(padOn)return PAD_BTN_NAMES[padi(id)]||'PAD';
+  return isMobile()?'USE':keyName(settings.binds[id]);
+}
 
 /* ============ RENDERER / SCENE ============ */
 renderer=new THREE.WebGLRenderer({antialias:!isMobile(),
@@ -1553,7 +1575,11 @@ function lbRender(){
 
 /* ============ MAP DATA ============ */
 const GUN_COST={VECTOR:1000,TRIAD:1200,JUDGE:1250,SWEEPER:1500,HORNET:1400,
-  MAULER:1500,LONGSHOT:1800,THUMPER:2000,RAILGUN:2200,SHREDDER:2500,SCYTHE:3000};
+  MAULER:1500,LONGSHOT:1800,THUMPER:2000,RAILGUN:2200,SHREDDER:2500,SCYTHE:3000,
+  DERRINGER:700,RATTILER:850,BURST9:950,MACHINE:1100,BULLDOG:1300,KETTLE:1450,
+  AUTO12:1750,KRAKEN:1250,STINGER:1350,VIPER:1550,PULSE:1700,BRUISER:1600,
+  FALCON:1850,WARDEN:2100,SPECTER:2350,MANTIS:2400,BASTION:2700,NOVA:2900,
+  ATLAS:2500,COMET:3200};
 const MAPS=[
 {name:'FOUNDRY',sub:'3 ZONES · INDUSTRIAL GRID · 104m',
  half:52,bg:0xcf9a62,spawn:[0,40],yaw:0,relic:[0,26,26],box:{x:-38,z:-36},
@@ -1638,6 +1664,26 @@ const WEAPONS={
  RAILGUN:{n:'RAILGUN',cls:'heavy',dmg:140,mag:4,rpm:55,rel:2.4,spr:0,auto:false,pel:1,rng:200,pi:4,hs:1.5,shake:1.1},
  SHREDDER:{n:'SHREDDER',cls:'lmg',dmg:25,mag:64,rpm:740,rel:3.0,spr:.040,auto:true,pel:1,rng:65,pi:0,hs:1.7,shake:.35},
  SCYTHE:{n:'SCYTHE',cls:'rifle',dmg:30,mag:44,rpm:600,rel:2.2,spr:.020,auto:true,pel:1,rng:75,pi:1,hs:1.9,shake:.3},
+ DERRINGER:{n:'DERRINGER',cls:'pistol',dmg:72,mag:2,rpm:180,rel:1.2,spr:.006,auto:false,pel:1,rng:65,pi:0,hs:2.4,shake:.5},
+ RATTILER:{n:'RATTILER',cls:'pistol',dmg:25,mag:15,rpm:520,rel:1.3,spr:.018,auto:true,pel:1,rng:58,pi:0,hs:1.7,shake:.3},
+ BURST9:{n:'BURST-9',cls:'pistol',dmg:29,mag:18,rpm:720,rel:1.4,spr:.014,auto:false,pel:1,rng:70,pi:0,hs:1.8,shake:.32},
+ MACHINE:{n:'MACHINE',cls:'pistol',dmg:19,mag:24,rpm:1050,rel:1.6,spr:.04,auto:true,pel:1,rng:42,pi:0,hs:1.5,shake:.28},
+ BULLDOG:{n:'BULLDOG',cls:'shotgun',dmg:19,mag:8,rpm:115,rel:2.0,spr:.06,auto:false,pel:8,rng:28,pi:0,hs:1.5,shake:.8},
+ KETTLE:{n:'KETTLE',cls:'shotgun',dmg:26,mag:4,rpm:70,rel:2.1,spr:.045,auto:false,pel:10,rng:34,pi:0,hs:1.6,shake:1},
+ AUTO12:{n:'AUTO-12',cls:'shotgun',dmg:13,mag:10,rpm:260,rel:2.5,spr:.075,auto:true,pel:7,rng:24,pi:0,hs:1.4,shake:.75},
+ KRAKEN:{n:'KRAKEN',cls:'smg',dmg:31,mag:24,rpm:680,rel:1.5,spr:.025,auto:true,pel:1,rng:62,pi:0,hs:1.7,shake:.35},
+ STINGER:{n:'STINGER',cls:'smg',dmg:16,mag:40,rpm:1250,rel:1.7,spr:.05,auto:true,pel:1,rng:38,pi:0,hs:1.45,shake:.22},
+ VIPER:{n:'VIPER',cls:'smg',dmg:24,mag:28,rpm:840,rel:1.35,spr:.028,auto:true,pel:1,rng:52,pi:0,hs:1.6,shake:.27},
+ PULSE:{n:'PULSE',cls:'smg',dmg:38,mag:18,rpm:460,rel:1.45,spr:.012,auto:true,pel:1,rng:78,pi:1,hs:1.9,shake:.4},
+ BRUISER:{n:'BRUISER',cls:'rifle',dmg:42,mag:20,rpm:380,rel:1.8,spr:.012,auto:true,pel:1,rng:105,pi:1,hs:2,shake:.45},
+ FALCON:{n:'FALCON',cls:'rifle',dmg:58,mag:12,rpm:260,rel:1.9,spr:.006,auto:false,pel:1,rng:140,pi:2,hs:2.4,shake:.55},
+ WARDEN:{n:'WARDEN',cls:'rifle',dmg:24,mag:36,rpm:780,rel:2.1,spr:.03,auto:true,pel:1,rng:82,pi:0,hs:1.7,shake:.38},
+ SPECTER:{n:'SPECTER',cls:'rifle',dmg:34,mag:30,rpm:600,rel:1.8,spr:.018,auto:true,pel:1,rng:96,pi:1,hs:1.9,shake:.34},
+ MANTIS:{n:'MANTIS',cls:'lmg',dmg:29,mag:75,rpm:880,rel:3.2,spr:.048,auto:true,pel:1,rng:60,pi:0,hs:1.6,shake:.42},
+ BASTION:{n:'BASTION',cls:'heavy',dmg:105,mag:8,rpm:120,rel:2.8,spr:.01,auto:false,pel:1,rng:125,pi:2,hs:2.2,shake:1},
+ NOVA:{n:'NOVA',cls:'heavy',dmg:52,mag:30,rpm:360,rel:2.4,spr:.025,auto:true,pel:1,rng:90,pi:2,hs:1.8,shake:.75},
+ ATLAS:{n:'ATLAS',cls:'launcher',dmg:165,mag:3,rpm:48,rel:2.8,spr:0,auto:false,pel:1,rng:70,pi:1,hs:1,shake:1.2,grenade:true},
+ COMET:{n:'COMET',cls:'launcher',dmg:90,mag:6,rpm:105,rel:2.2,spr:0,auto:false,pel:1,rng:90,pi:0,hs:1,shake:.85,grenade:true},
 };
 const MOD_SLOTS=[
  ['optic','OPTIC'],['barrel','BARREL'],['under','UNDERBARREL'],
@@ -2061,7 +2107,7 @@ function updateCoop(rdt){
   el.innerHTML=html;
   if(nearDown.length&&!player.down){
     $('prompt').style.display='block';
-    $('prompt').innerHTML=`<span class="pk">${isMobile()?'USE':keyName(settings.binds.interact)}</span>REVIVE TEAMMATE`;
+    $('prompt').innerHTML=`<span class="pk">${actionLabel('interact')}</span>REVIVE TEAMMATE`;
     lastPrompt='__revive__';
     if(pressed.interact||TK.use){
       const tid=nearDown[0];
@@ -2075,6 +2121,9 @@ function updateCoop(rdt){
 /* ============ GUNSMITH PREVIEW ============ */
 const pvScene=new THREE.Scene();
 if(scene.environment)pvScene.environment=scene.environment;
+const pvRenderer=new THREE.WebGLRenderer({canvas:$('pvCv'),antialias:true,alpha:true});
+pvRenderer.setPixelRatio(Math.min(devicePixelRatio,2));
+pvRenderer.setSize(250,240,false);
 const pvCam=new THREE.PerspectiveCamera(30,250/240,.01,10);
 pvCam.position.set(.12,.08,1.15);
 pvCam.lookAt(0,-.02,-.15);
@@ -2086,6 +2135,27 @@ const pvRim=new THREE.DirectionalLight(0x8899ff,.6);
 pvRim.position.set(-1,.4,-1);
 pvScene.add(pvRim);
 let pvGun=null;
+let pvYaw=.35,pvPitch=-.08,pvZoom=1;
+const pvCv=$('pvCv');
+let pvDrag=null;
+pvCv.addEventListener('pointerdown',e=>{
+  pvDrag={x:e.clientX,y:e.clientY};
+  pvCv.setPointerCapture(e.pointerId);
+});
+pvCv.addEventListener('pointermove',e=>{
+  if(!pvDrag)return;
+  pvYaw+=(e.clientX-pvDrag.x)*.012;
+  pvPitch=clamp(pvPitch+(e.clientY-pvDrag.y)*.008,-.7,.6);
+  pvDrag.x=e.clientX;pvDrag.y=e.clientY;
+  if(pvGun)pvGun.rotation.set(pvPitch,pvYaw,0);
+});
+pvCv.addEventListener('pointerup',()=>{pvDrag=null;});
+pvCv.addEventListener('pointercancel',()=>{pvDrag=null;});
+pvCv.addEventListener('wheel',e=>{
+  pvZoom=clamp(pvZoom+e.deltaY*.001,0,1.5);
+  if(pvGun)pvGun.scale.setScalar(1+pvZoom*.35);
+  e.preventDefault();
+},{passive:false});
 
 /* ============ NAV ============ */
 const NAV={cs:2,w:0,h:0,ox:0,oz:0,walk:null,dist:null,fDist:[],t:0};
@@ -4441,7 +4511,7 @@ function updateInteract(){
   if(bestIt.type==='pap'&&inv[curW].upg){label='P-AMPED · AMMO';cost=500;}
   if(cost>0)label+=' · '+cost;
   if(NET.online&&!NET.isHost)label+=' · HOST ONLY';
-  const html=`<span class="pk">${isMobile()?'USE':keyName(settings.binds.interact)}</span>${label}`;
+  const html=`<span class="pk">${actionLabel('interact')}</span>${label}`;
   if(html!==lastPrompt){
     lastPrompt=html;
     pr.innerHTML=html;
@@ -4552,6 +4622,8 @@ function pvRebuild(){
   if(!w)return;
   pvGun=makeGunGroup(WEAPONS[w.id].cls,w);
   pvGun.position.set(0,0,.28);
+  pvGun.rotation.set(pvPitch,pvYaw,0);
+  pvGun.scale.setScalar(1+pvZoom*.35);
   pvScene.add(pvGun);
 }
 function openWorkshop(){
@@ -4574,6 +4646,36 @@ function closeWorkshop(){
   if(!isMobile())lockPointer();
 }
  $('shopClose').onclick=closeWorkshop;
+function equipWorkbenchWeapon(id){
+  const owned=inv.find(w=>w.id===id);
+  if(owned){
+    curW=inv.indexOf(owned);
+  }else{
+    const cost=GUN_COST[id];
+    if(points<cost){SFX.deny();return;}
+    points-=cost;
+    giveWeapon(id);
+  }
+  buildViewmodel(WEAPONS[id].cls,inv[curW]);
+  buildShopUI();pvRebuild();updMoney();updAmmo();updStrip();SFX.mod();
+}
+function saveLoadout(){
+  try{localStorage.setItem('redline_loadout',JSON.stringify({curW,inv}));SFX.mod();}
+  catch(e){SFX.deny();}
+}
+function loadLoadout(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('redline_loadout')||'null');
+    if(!saved||!Array.isArray(saved.inv)||!saved.inv.length){SFX.deny();return;}
+    inv=saved.inv.filter(w=>WEAPONS[w.id]).slice(0,3);
+    if(!inv.length){SFX.deny();return;}
+    curW=clamp(saved.curW|0,0,inv.length-1);
+    const w=inv[curW];
+    buildViewmodel(WEAPONS[w.id].cls,w);buildShopUI();pvRebuild();updAmmo();updStrip();SFX.mod();
+  }catch(e){SFX.deny();}
+}
+ $('saveLoadout').onclick=saveLoadout;
+ $('loadLoadout').onclick=loadLoadout;
 function buildShopUI(){
   const w=inv[curW];
   if(!w)return;
@@ -4593,6 +4695,19 @@ function buildShopUI(){
     `<div class="statRow"><span>ADS ZOOM</span><b>${E.zoom.toFixed(1)}×</b></div>`;
   const modsEl=$('shopMods');
   modsEl.innerHTML='';
+  const arsenal=document.createElement('div');
+  arsenal.id='arsenal';
+  arsenal.innerHTML='<h3>ARMORY · SELECT OR BUY</h3><div id="arsenalGrid"></div>';
+  const arsenalGrid=arsenal.querySelector('#arsenalGrid');
+  Object.keys(GUN_COST).forEach(id=>{
+    const owned=inv.some(x=>x.id===id);
+    const b=document.createElement('button');
+    b.className='arsenalBtn'+(id===w.id?' eq':'')+(!owned&&points<GUN_COST[id]?' cant':'');
+    b.innerHTML=`${WEAPONS[id].n}<span>${owned?'OWNED · EQUIP':GUN_COST[id].toLocaleString()+' PTS'}</span>`;
+    b.onclick=()=>equipWorkbenchWeapon(id);
+    arsenalGrid.appendChild(b);
+  });
+  modsEl.appendChild(arsenal);
   const wmods=w.mods||{};
   for(const[slot,slotName]of MOD_SLOTS){
     const div=document.createElement('div');
@@ -4809,7 +4924,7 @@ function pollPadMenu(rdt){
   if(padBindCapture)return;
   padRefresh();
   if(!padMenuEls.length){
-    for(const k in padMenuPrev)padMenuPrev[k]=false;
+    for(let i=0;i<gp.buttons.length;i++)padMenuPrev[i]=padBtn(gp,i);
     return;
   }
   const prev=padMenuPrev;
@@ -6002,16 +6117,7 @@ function frame(){
   if(composer&&state==='playing')composer.render();
   else renderer.render(scene,camera);
   if(shopOpen&&pvGun){
-    const px=Math.round(innerWidth-560),py=70,pw=250,ph=240;
-    renderer.autoClear=false;
-    renderer.clearDepth();
-    renderer.setScissorTest(true);
-    renderer.setScissor(px,innerHeight-py-ph,pw,ph);
-    renderer.setViewport(px,innerHeight-py-ph,pw,ph);
-    renderer.render(pvScene,pvCam);
-    renderer.setScissorTest(false);
-    renderer.setViewport(0,0,innerWidth,innerHeight);
-    renderer.autoClear=true;
+    pvRenderer.render(pvScene,pvCam);
   }
 }
 

@@ -913,6 +913,7 @@ function updateAtmosphere(dt,t){
   shaftMesh.lookAt(camera.position);
   shaftMesh.rotateX(Math.PI/2);
   shaftMat.opacity=.045*(1-decayK*.7)*skyMat.uniforms.sunI.value;
+  if(isSoloZombies())updateZombieFires(t);
   if((dustSkip=(dustSkip+1)&1))return; // update every other frame on all devices, cheap enough either way
   const a=dustGeo.attributes.position.array;
   for(let i=0;i<DUST_N;i++){
@@ -1425,7 +1426,7 @@ let decayK=0,decayTarget=0,decayRate=.4,lastDecayK=-1;
 let worldClean=null,worldAncient=null;
 const _cA=new THREE.Color(),_cB=new THREE.Color();
 function lerpHex(col,a,b,k){_cA.setHex(a);_cB.setHex(b);col.copy(_cA).lerp(_cB,k);}
-let ashPts=null,rainPts=null,clouds=[];
+let ashPts=null,rainPts=null,clouds=[],zombieFires=[];
 function applyDecayLerp(k){
   if(Math.abs(k-lastDecayK)<.002)return;
   lastDecayK=k;
@@ -1525,6 +1526,14 @@ function updateRain(dt){
   }
   rainGeo.attributes.position.needsUpdate=true;
 }
+function updateZombieFires(t){
+  for(let i=zombieFires.length-1;i>=0;i--){
+    const f=zombieFires[i],k=.8+Math.sin(t*7+i*1.7)*.18+Math.sin(t*13+i)*.08;
+    f.light.intensity=f.base*k;
+    f.flame.scale.y=.85+Math.sin(t*8+i)*.18;
+    f.flame.rotation.y=t*1.8+i;
+  }
+}
 function updateFlags(t){
   if(decayK>.9||document.hidden)return;
   for(const cl of flagCloths){
@@ -1554,6 +1563,7 @@ const modeName=()=>MODES.find(m=>m.id===mode).name;
 const roundIsHorror=n=>mode==='archive'||(mode==='break'&&n>=6);
 const isTDM=()=>mode==='tdm'||mode==='dom';
 const isDOM=()=>mode==='dom';
+const isSoloZombies=()=>mode==='solo';
 const tdmCfg={size:6,target:30,endless:false};
 const teamScores=[0,0];
 function loadBest(){return +(localStorage.getItem('redline_best_'+mode)||0);}
@@ -3245,6 +3255,12 @@ function pickSpawn(px,pz){
   return pool[(Math.random()*pool.length)|0].s;
 }
 function rollKind(){
+  if(isSoloZombies()){
+    const r=Math.random();
+    if(round>=5&&r<.08)return 'boss';
+    if(r<.2)return 'screamer';
+    return 'ancient';
+  }
   if(roundIsHorror(round)&&Math.random()<.5)return 'ancient';
   const r=Math.random();
   if(round>=5&&r<.1)return 'screamer';
@@ -4476,6 +4492,23 @@ function updateTransitBus(dt){
   }
   busState.lastX=x;busState.lastZ=z;
 }
+function buildZombieFires(){
+  const spots=[[-48,48],[48,48],[-48,-48],[48,-48],[-30,0],[30,0],[0,32],[0,-32]];
+  zombieFires=[];
+  for(let i=0;i<spots.length;i++){
+    const g=new THREE.Group();
+    g.position.set(spots[i][0],0,spots[i][1]);
+    const flame=new THREE.Mesh(new THREE.ConeGeometry(.16,.7,7),MAT.glowRed);
+    flame.position.y=.5;g.add(flame);
+    const ember=new THREE.Mesh(new THREE.SphereGeometry(.11,6,5),
+      new THREE.MeshBasicMaterial({color:0xff8a30}));
+    ember.position.y=.92;g.add(ember);
+    const light=new THREE.PointLight(0xff5a20,1.9,8,1.7);
+    light.position.y=.65;g.add(light);
+    worldAncient.add(g);
+    zombieFires.push({flame,light,base:1.9});
+  }
+}
 
 /* ============ WORLD BUILD ============ */
 function buildDoorMesh(d){
@@ -4590,6 +4623,10 @@ function buildWorld(){
   boxState={rolling:false,offered:null,timer:0};
   interactables.push({type:'box',x:bx,z:bz,cost:950,label:'MYSTERY BOX'});
   placeStations();
+  if(isSoloZombies()){
+    buildZombieFires();
+    zombieFires.forEach(f=>f.flame.parent.traverse(o=>keepDyn.add(o)));
+  }
   if(map.busRoute){
     buildTransitBus(map.busRoute);
     busState.g.traverse(o=>keepDyn.add(o));
@@ -4668,6 +4705,7 @@ function disposeWorld(){
     });
   }
   worldClean=null;worldAncient=null;
+  zombieFires=[];
   busState.g=null;busState.route=null;busState.seg=0;busState.t=0;
   enemies.forEach(releaseEnemyMesh);
   enemies=[];
@@ -5419,7 +5457,7 @@ function startRound(n){
   bossPending=(n%5===0);
   $('interTxt').textContent='';
   if(mode==='break'&&n===6){runCorruption();return;}
-  horrorMode=roundIsHorror(n);
+  horrorMode=isSoloZombies()||roundIsHorror(n);
   if(horrorMode&&decayTarget<1){decayTarget=1;decayRate=.25;}
   announce('ROUND '+String(n).padStart(2,'0'),
     bossPending?'BOSS INCOMING':horrorMode?'THEY REMEMBER YOU':'HORDE ×2');
@@ -5976,10 +6014,11 @@ function startGame(){
     budget=6+(NET.online&&NET.isHost?Object.keys(NET.conns).length*3:0);
     spawnT=1;
     bossPending=false;
-    if(mode==='archive'){
+    if(mode==='archive'||isSoloZombies()){
       horrorMode=true;
       setDecayInstant(true);
-      announce('ARCHIVE','DEAD FROM ROUND 1');
+      announce(isSoloZombies()?'FROSTLINE TRANSIT':'ARCHIVE',
+        isSoloZombies()?'THE DEAD ARE WALKING':'DEAD FROM ROUND 1');
     }else{
       horrorMode=false;
       setDecayInstant(false);

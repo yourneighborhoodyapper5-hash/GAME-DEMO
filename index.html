@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>REDLINE — build 1.0.4</title>
+<title>REDLINE — build 1.0.5</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -441,30 +441,6 @@
   #setFoot{padding:13px 26px;border-top:2px solid var(--ink);display:flex;
     justify-content:space-between;align-items:center}
   #setFoot .hint{font-size:10px;letter-spacing:.25em;opacity:.5}
-
-  /* ============ CUTSCENES ============ */
-  #cineTop,#cineBot{position:fixed;left:0;right:0;height:0;background:#000;z-index:40;
-    transition:height .6s cubic-bezier(.4,0,.2,1);pointer-events:none}
-  #cineTop{top:0}#cineBot{bottom:0}
-  body.cine #cineTop,body.cine #cineBot{height:11vh}
-  #cineSub{position:fixed;left:50%;bottom:13vh;transform:translateX(-50%);
-    max-width:80vw;text-align:center;z-index:41;display:none;pointer-events:none}
-  #cineSub b{color:var(--red);letter-spacing:.25em;font-size:11px;display:block;
-    margin-bottom:5px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
-  #cineSub span{font-size:15px;letter-spacing:.05em;color:var(--hud);
-    text-shadow:0 2px 8px rgba(0,0,0,.9)}
-  #cineTitle{position:fixed;left:0;right:0;top:34%;text-align:center;z-index:41;
-    font-family:'Archivo Black',sans-serif;font-size:clamp(30px,7vw,84px);color:var(--paper);
-    text-transform:uppercase;opacity:0;transform:scale(1.06);
-    transition:opacity .5s,transform .8s cubic-bezier(.2,1.4,.4,1);pointer-events:none;
-    text-shadow:0 4px 24px rgba(0,0,0,.7)}
-  #cineTitle.on{opacity:1;transform:scale(1)}
-  #cineTitle small{display:block;font:700 12px 'IBM Plex Mono',monospace;color:var(--red);
-    letter-spacing:.5em;margin-top:10px}
-  #cineSkip{position:fixed;right:20px;bottom:12.5vh;z-index:41;font-size:9px;
-    letter-spacing:.3em;color:rgba(242,240,234,.5);display:none;pointer-events:none;
-    font-family:'IBM Plex Mono',monospace}
-  body.cine #cineSkip{display:block}
 </style>
 </head>
 <body>
@@ -556,7 +532,7 @@
 
 <div id="menu" class="ov">
   <div id="menuTop">
-    <span>REDLINE <b>/</b> BUILD 1.0.4</span>
+    <span>REDLINE <b>/</b> BUILD 1.0.5</span>
     <span>6 MODES · 6 MAPS</span>
   </div>
   <div id="tag">CHOOSE HOW IT ENDS.</div>
@@ -762,7 +738,7 @@ const PAD_BINDS=[
 const CH_COLORS=['#f2f0ea','#ff2418','#00e07a','#2f8fff','#ffffff','#ffd23d'];
 const DEFAULTS={
   sens:1.0,invertY:false,fov:78,autoReload:true,bob:true,shake:1.0,
-  crosshair:true,fps:false,vol:.42,filmFx:true,bright:1.35,compass:true,
+  crosshair:true,fps:false,vol:.42,filmFx:true,bright:1.6,compass:true,
   ctrlMode:'auto',minimap:true,
   chSize:9,chGap:8,chColor:'#f2f0ea',cbSafe:false,navDebug:false,
   padSens:1.0,padDeadL:.15,padDeadR:.12,padCurve:1.8,padVert:.85,
@@ -775,7 +751,8 @@ function loadSettings(){
     const s=JSON.parse(localStorage.getItem('redline_cfg')||'{}');
     const m={...DEFAULTS,...s,binds:{...DEFAULTS.binds,...(s.binds||{})},
       padBinds:{...DEFAULTS.padBinds,...(s.padBinds||{})}};
-    if(s.bright===undefined||s.bright===1)m.bright=DEFAULTS.bright; // migrate old saves
+    // migrate old defaults that were too dark to play
+    if(s.bright===undefined||s.bright===1||s.bright===1.35)m.bright=DEFAULTS.bright;
     return m;
   }catch(e){return JSON.parse(JSON.stringify(DEFAULTS));}
 }
@@ -1444,20 +1421,29 @@ const smokeTex=(()=>{
 const DECAL_MAT=new THREE.MeshBasicMaterial({color:0x2a0d0a,transparent:true,
   opacity:.82,depthWrite:false});
 
-/* ============ WORLD DECAY ============ */
+/* ============ WORLD DECAY + EXPOSURE ============ */
 let decayK=0,decayTarget=0,decayRate=.4,lastDecayK=-1;
 let worldClean=null,worldAncient=null;
 const _cA=new THREE.Color(),_cB=new THREE.Color();
 function lerpHex(col,a,b,k){_cA.setHex(a);_cB.setHex(b);col.copy(_cA).lerp(_cB,k);}
 let ashPts=null,rainPts=null,clouds=[],zombieFires=[];
-/* live darkness lighting — driven by the Zombie Brightness slider */
+/* live darkness lighting — the slider lifts the NIGHT ITSELF: fog color,
+   draw distance, ambient, sun, and a strong personal lantern. Amplifying a
+   near-black fog color gives near-black, so we recolor the fog instead. */
+const _fogDarkC=new THREE.Color(FOGC_DARK),_fogLitC=new THREE.Color(0x5a6878);
 function applyExposure(){
-  const k=decayK,b=clamp(settings.bright,.5,2.5);
-  renderer.toneMappingExposure=1.02-(1.02-b)*k;
-  hemiL.intensity=HEMI_BASE-(HEMI_BASE-Math.min(HEMI_BASE,.42+(b-1)*.3))*k;
-  playerLight.intensity=Math.min(1.8,.55*k*Math.max(1,b*.9));
-  scene.fog.near=FOG_NEAR_C+(FOG_NEAR_D+(b-1)*8-FOG_NEAR_C)*k;
-  scene.fog.far=FOG_FAR_C+(FOG_FAR_D+Math.max(0,(b-1)*80)-FOG_FAR_C)*k;
+  const k=decayK,b=clamp((settings.bright-.5)/2.5,0,1); // 0..1 across slider
+  renderer.toneMappingExposure=1.02+(2.2-1.02)*b*k;
+  if(k>.5){
+    scene.fog.color.lerpColors(_fogDarkC,_fogLitC,b);
+    scene.background.copy(scene.fog.color);
+  }
+  scene.fog.near=FOG_NEAR_C+(lerpNum(FOG_NEAR_D,30,b)-FOG_NEAR_C)*k;
+  scene.fog.far=FOG_FAR_C+(lerpNum(FOG_FAR_D,340,b)-FOG_FAR_C)*k;
+  hemiL.intensity=HEMI_BASE-(HEMI_BASE-lerpNum(HEMI_DARK,1.15,b))*k;
+  sun.intensity=SUN_BASE-(SUN_BASE-lerpNum(SUN_DARK,1.1,b))*k;
+  playerLight.intensity=lerpNum(.2,3.4,b)*k;
+  playerLight.distance=lerpNum(15,38,b);
 }
 function applyDecayLerp(k){
   if(Math.abs(k-lastDecayK)<.002)return;
@@ -4055,7 +4041,7 @@ function updateEnemies(dt){
     e.mesh.position.set(e.pos.x,e.pos.y,e.pos.z);
     if(hasTgt)e.mesh.rotation.y=Math.atan2(-dx,-dz);
     if(!(ud.zombie&&e.swingT<=0&&e.riseT<=0)){
-      // zombie idle/shamble sets rotation.z itself in its block
+      // zombies set rotation.z themselves in their animation block
       if((melee||e.kind==='screamer')&&!e.dead)
         e.mesh.rotation.z=Math.sin(now*1.7+e.walkT)*.04;
       else if(!e.dead&&!ud.zombie)e.mesh.rotation.z*=1-Math.min(1,6*dt);
@@ -5900,130 +5886,6 @@ function updateWeapon(dt){
   }else laserLine.visible=false;
 }
 
-/* ============ CUTSCENE ENGINE ============ */
-const CINE={active:false,steps:[],si:0,end:null,justEnded:0};
-function buildCineUI(){
-  if($('cineTop'))return;
-  const top=document.createElement('div');top.id='cineTop';
-  const bot=document.createElement('div');bot.id='cineBot';
-  const sub=document.createElement('div');sub.id='cineSub';
-  const ti=document.createElement('div');ti.id='cineTitle';
-  const sk=document.createElement('div');sk.id='cineSkip';
-  sk.textContent='TAP / PRESS ANY KEY TO SKIP';
-  document.body.append(top,bot,sub,ti,sk);
-  const s=document.createElement('style');s.id='cineStyle';
-  s.textContent='body.cine #pauseBtn{display:none!important}';
-  document.head.appendChild(s);
-}
-function cineStart(steps,onEnd){
-  CINE.active=true;CINE.steps=steps;CINE.si=0;CINE.end=onEnd||null;
-  document.body.classList.add('cine');
-  buildCineUI();
-  mouseDown=false;fireQueued=false;adsHeld=false;
-  touchState.fire=false;touchState.fireSlide=false;
-  if(document.pointerLockElement)document.exitPointerLock();
-  $('hud').style.opacity=0;
-}
-function cineEnd(){
-  if(!CINE.active)return;
-  CINE.active=false;
-  CINE.justEnded=performance.now();
-  document.body.classList.remove('cine');
-  const sub=$('cineSub'),ti=$('cineTitle');
-  if(sub)sub.style.display='none';
-  if(ti)ti.classList.remove('on');
-  $('hud').style.opacity='';
-  for(const k in pressed)pressed[k]=false;
-  for(const k in TK)TK[k]=false;
-  const f=CINE.end;CINE.end=null;
-  if(!isMobile()&&state==='playing')lockPointer();
-  if(f)f();
-}
-addEventListener('keydown',e=>{
-  if(!CINE.active)return;
-  e.preventDefault();e.stopPropagation();
-  cineEnd();
-},true);
-addEventListener('pointerdown',e=>{
-  if(!CINE.active)return;
-  e.stopPropagation();
-  cineEnd();
-},true);
-function cineUpdate(rdt){
-  if(!CINE.active)return;
-  const st=CINE.steps[CINE.si];
-  if(!st){cineEnd();return;}
-  if(st._t===undefined){st._t=0;st._on=false;}
-  st._t+=rdt;
-  const k=st.dur?Math.min(1,st._t/st.dur):1;
-  if(st.type==='cam'){
-    const ek=1-Math.pow(1-k,2);
-    camera.position.lerpVectors(st.from,st.to,ek);
-    if(st.look)camera.lookAt(st.look);
-  }else if(st.type==='title'){
-    if(!st._on){st._on=true;
-      const ti=$('cineTitle');
-      ti.innerHTML=st.main+(st.sub?`<small>${st.sub}</small>`:'');
-      ti.classList.add('on');
-    }
-  }else if(st.type==='line'){
-    if(!st._on){st._on=true;
-      const sub=$('cineSub');
-      sub.style.display='block';
-      sub.innerHTML=`<b>${st.who}</b><span></span>`;
-      st.el=sub.querySelector('span');
-      st.chars=-1;
-      if(st.sfx)st.sfx();
-    }
-    const want=Math.min(st.text.length,Math.floor(st._t*34));
-    if(want!==st.chars){st.chars=want;st.el.textContent=st.text.slice(0,st.chars);}
-  }else if(st.type==='fn'&&st.fn){st.fn();}
-  if(k>=1){
-    if(st.type==='title')$('cineTitle').classList.remove('on');
-    if(st.type==='line')$('cineSub').style.display='none';
-    st._t=undefined;st._on=false;st.el=null;
-    CINE.si++;
-  }
-}
-/* --- scripted scenes --- */
-function zombiesIntro(){
-  const pp=player.pos.clone(),yaw=player.yaw;
-  const fwd=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
-  const side=new THREE.Vector3(-fwd.z,0,fwd.x);
-  const from=pp.clone().addScaledVector(fwd,10).addScaledVector(side,8);from.y=9;
-  const mid=pp.clone().addScaledVector(fwd,6);mid.y=3.4;
-  const to=pp.clone().addScaledVector(fwd,1.4);to.y=1.62;
-  const look0=pp.clone();look0.y=1.4;
-  cineStart([
-    {type:'fn',fn(){camera.position.copy(from);camera.lookAt(look0);}},
-    {type:'title',main:'FROSTLINE TRANSIT',sub:'NIGHT 0',dur:2.6},
-    {type:'cam',from,to:mid,look:look0,dur:3.2},
-    {type:'line',who:'DUTCH — WEST CONTROL',dur:3.6,sfx:()=>SFX.static(),
-      text:'Nightshift, you copy? Grid just went dark across the whole line.'},
-    {type:'cam',from:mid,to,look:look0,dur:2.2},
-    {type:'line',who:'DUTCH',dur:3.2,
-      text:'It is not the power, kid. The line itself is singing.'},
-    {type:'line',who:'NIGHTSHIFT',dur:2.4,sfx:()=>SFX.growl(),
-      text:'Then I will walk the rails.'},
-    {type:'title',main:'THE DEAD ARE WALKING',sub:'ROUND 01',dur:2.2},
-  ],()=>{announce('ROUND 01','HORDE ×2 EVERY ROUND');});
-}
-function bossCine(b){
-  const p=player.pos;
-  const dir=new THREE.Vector3(b.pos.x-p.x,0,b.pos.z-p.z);
-  if(dir.lengthSq()<.01)dir.set(0,0,1);
-  dir.normalize();
-  const side=new THREE.Vector3(-dir.z,0,dir.x);
-  const from=p.clone().addScaledVector(dir,5).addScaledVector(side,3);from.y=2.6;
-  const to=from.clone().addScaledVector(dir,3.2);to.y=1.8;
-  const look=b.pos.clone();look.y=b.h*.62;
-  cineStart([
-    {type:'fn',fn(){camera.position.copy(from);camera.lookAt(look);}},
-    {type:'title',main:b.name,sub:'BOSS',dur:2.2},
-    {type:'cam',from,to,look,dur:2.4},
-  ]);
-}
-
 /* ============ DIRECTOR ============ */
 let lastRoundTxt='';
 function director(dt){
@@ -6035,7 +5897,6 @@ function director(dt){
       bossPending=false;
       bossRef=spawnEnemy('boss',-1)||null;
       if(!bossRef)bossPending=true;
-      else if(!NET.online&&!CINE.active)bossCine(bossRef);
     }
     spawnT-=dt;
     const cap=Math.min(7+round+Math.floor(kills/20),16);
@@ -6536,8 +6397,6 @@ addEventListener('keydown',e=>{
     return;
   }
   if(e.code==='Escape'){
-    if(CINE.active)return; // capture handler already skipped it
-    if(performance.now()-CINE.justEnded<200)return;
     if(state==='playing')pauseGame();
     else if(state==='paused')resumeGame();
     return;
@@ -6592,7 +6451,7 @@ function lockPointer(){
   }catch(err){}
 }
 document.addEventListener('pointerlockchange',()=>{
-  if(!document.pointerLockElement&&state==='playing'&&!isMobile()&&!shopOpen&&!CINE.active)pauseGame();
+  if(!document.pointerLockElement&&state==='playing'&&!isMobile()&&!shopOpen)pauseGame();
 });
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden&&state==='playing')pauseGame();
@@ -6643,8 +6502,8 @@ function startGame(){
     if(mode==='archive'||isSoloZombies()){
       horrorMode=true;
       setDecayInstant(true);
-      if(isSoloZombies())zombiesIntro();
-      else announce('ARCHIVE','DEAD FROM ROUND 1');
+      announce(isSoloZombies()?'FROSTLINE TRANSIT':'ARCHIVE',
+        isSoloZombies()?'THE DEAD ARE WALKING':'DEAD FROM ROUND 1');
     }else{
       horrorMode=false;
       setDecayInstant(false);
@@ -6952,7 +6811,7 @@ function buildSettingsUI(){
   toggle('FPS Counter','fps');
   slider('Volume','vol',0,1,.05,v=>Math.round(v*100)+'%');
   toggle('Film FX (horror)','filmFx');
-  slider('Zombie Brightness','bright',.5,2.5,.05,v=>v.toFixed(2)+'×');
+  slider('Zombie Brightness','bright',.5,3,.05,v=>v.toFixed(2)+'×');
   toggle('Compass','compass');
   toggle('Navigation Debug','navDebug');
   const row=document.createElement('div');row.className='srow';
@@ -6983,9 +6842,6 @@ function frame(){
     if(c.position.x>340)c.position.x=-340;
   }
   if(state==='playing'){
-    if(CINE.active){
-      cineUpdate(rdt); // world frozen during cutscenes; FX keep settling below
-    }else{
     const sdt=rdt*timeScale;
     updatePlayer(sdt,rdt);
     updateWeapon(sdt);
@@ -7017,7 +6873,6 @@ function frame(){
     }
     for(const k in pressed)pressed[k]=false;
     for(const k in TK)TK[k]=false;
-    }
   }
   updateTracers(rdt);
   updateParticles(rdt);

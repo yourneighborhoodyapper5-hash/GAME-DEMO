@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>REDLINE — build 1.0.5</title>
+<title>REDLINE — build 1.0.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -532,7 +532,7 @@
 
 <div id="menu" class="ov">
   <div id="menuTop">
-    <span>REDLINE <b>/</b> BUILD 1.0.5</span>
+    <span>REDLINE <b>/</b> BUILD 1.0.2</span>
     <span>6 MODES · 6 MAPS</span>
   </div>
   <div id="tag">CHOOSE HOW IT ENDS.</div>
@@ -698,7 +698,7 @@ const RAY_O=new THREE.Vector3(),RAY_D=new THREE.Vector3(),RAY_R=new THREE.Vector
 const HAS_TOUCH=('ontouchstart' in window)||navigator.maxTouchPoints>0;
 const DETECTED_MOBILE=HAS_TOUCH&&matchMedia('(pointer: coarse)').matches
   &&matchMedia('(hover: none)').matches;
-const touchState={mx:0,my:0,ldx:0,ldy:0,fire:false,fireSlide:false,focus:false,crouchHold:false,ads:false};
+const touchState={mx:0,my:0,ldx:0,ldy:0,fire:false,focus:false,crouchHold:false,ads:false};
 const TK={reload:false,use:false,prevW:false,nextW:false,frag:false,ks0:false,ks1:false};
 
 /* ============ SETTINGS ============ */
@@ -738,7 +738,7 @@ const PAD_BINDS=[
 const CH_COLORS=['#f2f0ea','#ff2418','#00e07a','#2f8fff','#ffffff','#ffd23d'];
 const DEFAULTS={
   sens:1.0,invertY:false,fov:78,autoReload:true,bob:true,shake:1.0,
-  crosshair:true,fps:false,vol:.42,filmFx:true,bright:1.6,compass:true,
+  crosshair:true,fps:false,vol:.42,filmFx:true,bright:1.0,compass:true,
   ctrlMode:'auto',minimap:true,
   chSize:9,chGap:8,chColor:'#f2f0ea',cbSafe:false,navDebug:false,
   padSens:1.0,padDeadL:.15,padDeadR:.12,padCurve:1.8,padVert:.85,
@@ -749,11 +749,8 @@ const DEFAULTS={
 function loadSettings(){
   try{
     const s=JSON.parse(localStorage.getItem('redline_cfg')||'{}');
-    const m={...DEFAULTS,...s,binds:{...DEFAULTS.binds,...(s.binds||{})},
+    return{...DEFAULTS,...s,binds:{...DEFAULTS.binds,...(s.binds||{})},
       padBinds:{...DEFAULTS.padBinds,...(s.padBinds||{})}};
-    // migrate old defaults that were too dark to play
-    if(s.bright===undefined||s.bright===1||s.bright===1.35)m.bright=DEFAULTS.bright;
-    return m;
   }catch(e){return JSON.parse(JSON.stringify(DEFAULTS));}
 }
 const settings=loadSettings();
@@ -786,7 +783,6 @@ function applySettings(){
   $('mm').style.display=settings.minimap?'block':'none';
   $('navDebug').style.display=settings.navDebug?'block':'none';
   document.body.classList.toggle('cb',settings.cbSafe);
-  if(renderer&&hemiL)applyExposure();
   applyCrosshair();
   applyControlMode();
 }
@@ -844,6 +840,10 @@ flashLight=new THREE.PointLight(0xffdcae,0,11,2);
 scene.add(flashLight);
 
 /* ============ POST-PROCESSING (tuned to run on an iPad-class GPU) ============ */
+// Deliberately skipping SSAO/SMAA passes — both are common causes of a "realistic"
+// web shooter dropping below 30fps on A-series/mobile GPUs. A single, cheap,
+// high-threshold bloom pass gets most of the visible "real light" payoff for
+// almost none of the cost, so it stays on for every device.
 let composer=null,bloomPass=null;
 function buildComposer(){
   composer=new EffectComposer(renderer);
@@ -853,7 +853,7 @@ function buildComposer(){
     isMobile()?innerWidth*0.55:innerWidth,
     isMobile()?innerHeight*0.55:innerHeight);
   bloomPass=new UnrealBloomPass(bloomRes,isMobile()?.38:.55,.4,.88);
-  bloomPass.threshold=.88;
+  bloomPass.threshold=.88; // only true highlights bloom — muzzle flash/emissive signs, not the whole scene
   bloomPass.strength=isMobile()?.38:.55;
   bloomPass.radius=.3;
   composer.addPass(bloomPass);
@@ -887,7 +887,7 @@ addEventListener('resize',()=>{
   }
 });
 
-/* ============ LIGHT SHAFT + DUST ============ */
+/* ============ LIGHT SHAFT + DUST (cheap: one mesh, tiered point count) ============ */
 const shaftMat=new THREE.MeshBasicMaterial({color:0xffdba0,transparent:true,
   opacity:.045,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,fog:false});
 const shaftMesh=new THREE.Mesh(new THREE.CylinderGeometry(.5,24,200,8,1,true),shaftMat);
@@ -914,7 +914,7 @@ function updateAtmosphere(dt,t){
   shaftMesh.rotateX(Math.PI/2);
   shaftMat.opacity=.045*(1-decayK*.7)*skyMat.uniforms.sunI.value;
   if(isSoloZombies())updateZombieFires(t);
-  if((dustSkip=(dustSkip+1)&1))return;
+  if((dustSkip=(dustSkip+1)&1))return; // update every other frame on all devices, cheap enough either way
   const a=dustGeo.attributes.position.array;
   for(let i=0;i<DUST_N;i++){
     a[i*3]+=Math.sin(t*.3+i)*dt*.3;
@@ -936,7 +936,7 @@ function tickAdaptive(dt){
     renderer.setPixelRatio(NORMAL_PR*dynScale);}
 }
 
-/* ============ SKY DOME ============ */
+/* ============ SKY DOME (custom shader, sunset) ============ */
 const SKY_CLEAN={top:new THREE.Color(0x2e4f86),mid:new THREE.Color(0xc9713d),
   bot:new THREE.Color(0xffc27a),sun:new THREE.Color(0xfff0cf),sunI:1};
 const SKY_DARK={top:new THREE.Color(0x04060a),mid:new THREE.Color(0x0a0d12),
@@ -991,7 +991,7 @@ const sunSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:(()=>{
 sunSpr.scale.setScalar(170);
 scene.add(sunSpr);
 
-/* environment reflections */
+/* environment reflections from gradient canvases */
 let envClean=null,envDark=null,envDarkState=false;
 try{
   function makeEnv(top,bot,sun){
@@ -1421,30 +1421,12 @@ const smokeTex=(()=>{
 const DECAL_MAT=new THREE.MeshBasicMaterial({color:0x2a0d0a,transparent:true,
   opacity:.82,depthWrite:false});
 
-/* ============ WORLD DECAY + EXPOSURE ============ */
+/* ============ WORLD DECAY ============ */
 let decayK=0,decayTarget=0,decayRate=.4,lastDecayK=-1;
 let worldClean=null,worldAncient=null;
 const _cA=new THREE.Color(),_cB=new THREE.Color();
 function lerpHex(col,a,b,k){_cA.setHex(a);_cB.setHex(b);col.copy(_cA).lerp(_cB,k);}
 let ashPts=null,rainPts=null,clouds=[],zombieFires=[];
-/* live darkness lighting — the slider lifts the NIGHT ITSELF: fog color,
-   draw distance, ambient, sun, and a strong personal lantern. Amplifying a
-   near-black fog color gives near-black, so we recolor the fog instead. */
-const _fogDarkC=new THREE.Color(FOGC_DARK),_fogLitC=new THREE.Color(0x5a6878);
-function applyExposure(){
-  const k=decayK,b=clamp((settings.bright-.5)/2.5,0,1); // 0..1 across slider
-  renderer.toneMappingExposure=1.02+(2.2-1.02)*b*k;
-  if(k>.5){
-    scene.fog.color.lerpColors(_fogDarkC,_fogLitC,b);
-    scene.background.copy(scene.fog.color);
-  }
-  scene.fog.near=FOG_NEAR_C+(lerpNum(FOG_NEAR_D,30,b)-FOG_NEAR_C)*k;
-  scene.fog.far=FOG_FAR_C+(lerpNum(FOG_FAR_D,340,b)-FOG_FAR_C)*k;
-  hemiL.intensity=HEMI_BASE-(HEMI_BASE-lerpNum(HEMI_DARK,1.15,b))*k;
-  sun.intensity=SUN_BASE-(SUN_BASE-lerpNum(SUN_DARK,1.1,b))*k;
-  playerLight.intensity=lerpNum(.2,3.4,b)*k;
-  playerLight.distance=lerpNum(15,38,b);
-}
 function applyDecayLerp(k){
   if(Math.abs(k-lastDecayK)<.002)return;
   lastDecayK=k;
@@ -1472,12 +1454,16 @@ function applyDecayLerp(k){
   sunSpr.material.opacity=.95*(1-k);
   lerpHex(scene.background,FOGC_CLEAN,FOGC_DARK,k);
   lerpHex(scene.fog.color,FOGC_CLEAN,FOGC_DARK,k);
+  scene.fog.near=FOG_NEAR_C+(FOG_NEAR_D-FOG_NEAR_C)*k;
+  scene.fog.far=FOG_FAR_C+(FOG_FAR_D-FOG_FAR_C)*k;
+  hemiL.intensity=HEMI_BASE-(HEMI_BASE-HEMI_DARK)*k;
   sun.intensity=SUN_BASE-(SUN_BASE-SUN_DARK)*k;
   lerpHex(sun.color,0xffd2a0,0x9aa2b0,k);
-  applyExposure();
+  renderer.toneMappingExposure=1.02-(1.02-1.0*settings.bright)*k;
   for(const c of clouds)c.visible=k<.5;
   rainPts.visible=k>.55;
   ashPts.visible=k>.45;
+  playerLight.intensity=.55*k;
   const wantDark=k>=.5;
   if(wantDark!==envDarkState){
     envDarkState=wantDark;
@@ -1795,7 +1781,8 @@ const PUPS={
 };
 const PUP_KEYS=Object.keys(PUPS);
 const streak={kills:0,uavT:0,mortars:0};
-  /* ============ AUDIO ============ */
+
+/* ============ AUDIO ============ */
 let AC=null,noiseBuf=null;
 function initAudio(){
   if(AC)return;
@@ -1870,332 +1857,11 @@ const SFX={
   step(){noiseHit(.045,.05,650,180);},
 };
 
-/* ============================================================
-   MUSIC — 5 procedural tracks + crossfading manager
-   redline=menu · diesel=transit/zombies · static=horror
-   overclock=boss/combat · lastlight=death screen
-   ============================================================ */
-const MNOTE=m=>440*Math.pow(2,(m-69)/12);
-let musicNoise=null;
-function mNoise(sec){
-  const b=AC.createBuffer(1,(AC.sampleRate*(sec||2))|0,AC.sampleRate);
-  const d=b.getChannelData(0);
-  for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
-  return b;
-}
-function mHit(out,when,o){
-  o=o||{};
-  const a=o.a??.003,d=o.d??.15,peak=o.peak??.8;
-  const g=AC.createGain();
-  g.gain.setValueAtTime(.0001,when);
-  g.gain.linearRampToValueAtTime(peak,when+a);
-  g.gain.exponentialRampToValueAtTime(.0001,when+a+d);
-  g.connect(out);return g;
-}
-function mPad(out,when,freqs,o){
-  o=o||{};
-  const type=o.type||'sawtooth',a=o.a??2,r=o.r??2.5,peak=o.peak??.1,
-    cutoff=o.cutoff??800,det=o.detune??9,dur=o.dur??8;
-  const g=AC.createGain();
-  g.gain.setValueAtTime(.0001,when);
-  g.gain.linearRampToValueAtTime(peak,when+a);
-  g.gain.setValueAtTime(peak,when+Math.max(a,dur-r));
-  g.gain.linearRampToValueAtTime(.0001,when+dur);
-  const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=cutoff;
-  g.connect(lp);lp.connect(out);
-  for(const f of freqs)for(const dt of[-det,det]){
-    const osc=AC.createOscillator();
-    osc.type=type;osc.frequency.value=f;osc.detune.value=dt;
-    osc.connect(g);osc.start(when);osc.stop(when+dur+.1);
-  }
-}
-function mPluck(out,when,freq,o){
-  o=o||{};
-  const dur=o.dur??1.4,bright=o.bright??.55,gain=o.gain??.5;
-  const n=Math.max(2,(AC.sampleRate/freq)|0);
-  const b=AC.createBuffer(1,n,AC.sampleRate),d=b.getChannelData(0);
-  for(let i=0;i<n;i++)d[i]=Math.random()*2-1;
-  const src=AC.createBufferSource();src.buffer=b;
-  const dl=AC.createDelay(.05);dl.delayTime.value=1/freq;
-  const fb=AC.createGain();fb.gain.value=.965;
-  const lp=AC.createBiquadFilter();lp.type='lowpass';
-  lp.frequency.value=400+bright*4200;
-  const g=AC.createGain();
-  g.gain.setValueAtTime(gain,when);
-  g.gain.exponentialRampToValueAtTime(.0001,when+dur);
-  src.connect(dl);dl.connect(lp);lp.connect(fb);fb.connect(dl);
-  lp.connect(g);g.connect(out);
-  src.start(when);src.stop(when+dur);
-}
-function mLoop(stepSec,onStep){
-  let next=null,running=true;
-  const iv=setInterval(()=>{
-    if(!running||!AC)return;
-    const now=AC.currentTime;
-    if(next===null)next=now+.06;
-    while(next<now+.18){onStep(next,stepSec);next+=stepSec;}
-  },40);
-  return{stop(){running=false;clearInterval(iv);}};
-}
-/* --- TRACK 1: REDLINE THEME (menu · 96bpm synthwave) --- */
-const TRACK_REDLINE=(()=>{
-  const CH=[[57,60,64],[53,57,60],[52,55,60],[55,59,62]];
-  const ROOT=[33,29,36,31],ARP=[69,72,76,79,76,72,74,69];
-  return{start(out){
-    const bar=60/96*4;let n=0;
-    if(!musicNoise)musicNoise=mNoise(2);
-    const dl=AC.createDelay(1);dl.delayTime.value=bar*.375;
-    const fb=AC.createGain();fb.gain.value=.3;
-    const wet=AC.createGain();wet.gain.value=.3;
-    dl.connect(fb);fb.connect(dl);dl.connect(wet);wet.connect(out);
-    const kick=t=>{const o=AC.createOscillator();o.frequency.setValueAtTime(120,t);
-      o.frequency.exponentialRampToValueAtTime(40,t+.11);
-      const g=mHit(out,t,{a:.002,d:.2,peak:.8});o.connect(g);o.start(t);o.stop(t+.25);};
-    const snare=t=>{const s=AC.createBufferSource();s.buffer=musicNoise;
-      const bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=1900;
-      const g=mHit(out,t,{d:.13,peak:.24});s.connect(bp);bp.connect(g);
-      s.start(t,Math.random()*.5);s.stop(t+.2);};
-    const hat=(t,acc)=>{const s=AC.createBufferSource();s.buffer=musicNoise;
-      const hp=AC.createBiquadFilter();hp.type='highpass';hp.frequency.value=7800;
-      const g=mHit(out,t,{d:.035,peak:acc?.14:.08});s.connect(hp);hp.connect(g);
-      s.start(t,Math.random()*.5);s.stop(t+.06);};
-    const bass=(t,f)=>{const o=AC.createOscillator();o.type='sawtooth';o.frequency.value=f;
-      const lp=AC.createBiquadFilter();lp.type='lowpass';lp.Q.value=7;
-      lp.frequency.setValueAtTime(850,t);
-      lp.frequency.exponentialRampToValueAtTime(150,t+.2);
-      const g=mHit(out,t,{d:.2,peak:.26});o.connect(lp);lp.connect(g);o.start(t);o.stop(t+.3);};
-    const arp=(t,f)=>{const o=AC.createOscillator();o.type='triangle';o.frequency.value=f;
-      const g1=mHit(dl,t,{d:.3,peak:.13}),g2=mHit(out,t,{d:.3,peak:.06});
-      o.connect(g1);o.connect(g2);o.start(t);o.stop(t+.4);};
-    const L=mLoop(bar,when=>{
-      const b=n%4;
-      mPad(out,when,CH[b].map(MNOTE),{dur:bar*1.02,peak:.04,cutoff:720,a:.7,r:1.4});
-      for(let i=0;i<8;i++)bass(when+i*bar/8,MNOTE(ROOT[b]+((i===3||i===7)?12:0)));
-      kick(when);kick(when+bar/2);snare(when+bar/4);snare(when+bar*3/4);
-      for(let i=0;i<8;i++)hat(when+i*bar/8,i%2===1);
-      if(n%2===1)for(let i=0;i<16;i+=2)
-        arp(when+i*bar/16,MNOTE(ARP[((i>>1)+n)%ARP.length]));
-      if(n%8===6)[[69,0],[72,.5],[76,1],[74,1.75],[69,2.5]].forEach(p=>
-        mPluck(dl,when+p[1]*bar/4,MNOTE(p[0]+12),{bright:.8,gain:.15,dur:1.8}));
-      n++;
-    });
-    return{stop(){L.stop();}};
-  }};
-})();
-/* --- TRACK 2: DIESEL HALO (transit/zombies · wind, engine, music box) --- */
-const TRACK_DIESEL=(()=>{
-  const MOTIF=[74,77,81,84,81,77,79,74];
-  return{start(out){
-    const bar=4;let n=0;const nodes=[];
-    if(!musicNoise)musicNoise=mNoise(2);
-    const w=AC.createBufferSource();w.buffer=musicNoise;w.loop=true;
-    const bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=480;bp.Q.value=.6;
-    const wg=AC.createGain();wg.gain.value=.05;
-    const lfo=AC.createOscillator();lfo.frequency.value=.07;
-    const lg=AC.createGain();lg.gain.value=260;
-    lfo.connect(lg);lg.connect(bp.frequency);
-    w.connect(bp);bp.connect(wg);wg.connect(out);
-    w.start();lfo.start();nodes.push(w,lfo);
-    const e=AC.createOscillator();e.type='sine';e.frequency.value=41;
-    const eg=AC.createGain();eg.gain.value=.03;
-    const tl=AC.createOscillator();tl.frequency.value=1.9;
-    const tg=AC.createGain();tg.gain.value=.015;
-    tl.connect(tg);tg.connect(eg.gain);
-    e.connect(eg);eg.connect(out);e.start();tl.start();nodes.push(e,tl);
-    const dl=AC.createDelay(2);dl.delayTime.value=.62;
-    const fb=AC.createGain();fb.gain.value=.46;
-    const wet=AC.createGain();wet.gain.value=.5;
-    dl.connect(fb);fb.connect(dl);dl.connect(wet);wet.connect(out);
-    const L=mLoop(bar,when=>{
-      mPad(out,when,[MNOTE(38),MNOTE(45),MNOTE(53)],{dur:bar*2,peak:.045,cutoff:420,a:3,r:3});
-      const k=(Math.random()*3)|0;
-      for(let i=0;i<k;i++){
-        const m=MOTIF[(Math.random()*MOTIF.length)|0]+(Math.random()<.25?12:0);
-        mPluck(dl,when+Math.random()*bar*.85,MNOTE(m),{bright:.35,gain:.11,dur:2.6});
-      }
-      if(n%4===3){ // distant metal groan
-        const o=AC.createOscillator();o.type='sawtooth';
-        o.frequency.setValueAtTime(58,when);
-        o.frequency.linearRampToValueAtTime(49,when+2.4);
-        const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=190;
-        const g=AC.createGain();
-        g.gain.setValueAtTime(.0001,when);
-        g.gain.linearRampToValueAtTime(.05,when+1.1);
-        g.gain.linearRampToValueAtTime(.0001,when+2.6);
-        o.connect(lp);lp.connect(g);g.connect(out);o.start(when);o.stop(when+2.8);
-      }
-      n++;
-    });
-    return{stop(){L.stop();nodes.forEach(x=>{try{x.stop();}catch(err){}});}};
-  }};
-})();
-/* --- TRACK 3: DEAD STATIC (horror · heartbeat, wrong chords) --- */
-const TRACK_STATIC=(()=>{
-  return{start(out){
-    const bar=4.8;let n=0;
-    if(!musicNoise)musicNoise=mNoise(2);
-    const thump=(t,f,p)=>{const o=AC.createOscillator();o.frequency.setValueAtTime(f,t);
-      o.frequency.exponentialRampToValueAtTime(30,t+.14);
-      const g=mHit(out,t,{a:.004,d:.19,peak:p});o.connect(g);o.start(t);o.stop(t+.25);};
-    const gust=t=>{const s=AC.createBufferSource();s.buffer=musicNoise;
-      const bp=AC.createBiquadFilter();bp.type='bandpass';
-      bp.frequency.value=2200+Math.random()*900;bp.Q.value=1.2;
-      const g=AC.createGain();
-      g.gain.setValueAtTime(.0001,t);
-      g.gain.linearRampToValueAtTime(.045,t+1.4);
-      g.gain.linearRampToValueAtTime(.0001,t+3.1);
-      s.connect(bp);bp.connect(g);g.connect(out);
-      s.start(t,Math.random());s.stop(t+3.3);};
-    const L=mLoop(bar,when=>{
-      const v=n%2?.15:.28;
-      thump(when,58,v);thump(when+.34,50,v*.7);
-      mPad(out,when,n%4<2?[MNOTE(48),MNOTE(49),MNOTE(43)]:[MNOTE(44),MNOTE(45),MNOTE(39)],
-        {dur:bar*1.6,peak:.05,cutoff:500,a:3.4,r:3.4});
-      if(Math.random()<.55)gust(when+Math.random()*bar);
-      if(n%7===5){
-        const o=AC.createOscillator();o.type='square';
-        o.frequency.setValueAtTime(720,when);
-        o.frequency.exponentialRampToValueAtTime(300,when+.5);
-        const g=mHit(out,when,{d:.6,peak:.045});o.connect(g);o.start(when);o.stop(when+.7);
-      }
-      n++;
-    });
-    return{stop(){L.stop();}};
-  }};
-})();
-/* --- TRACK 4: OVERCLOCK (combat/boss · 140bpm acid bass) --- */
-const TRACK_OVERCLOCK=(()=>{
-  const SEQ=[0,0,12,0,3,0,10,0,0,0,12,3,5,3,10,12];
-  return{start(out){
-    const bar=60/140*4;let n=0;
-    if(!musicNoise)musicNoise=mNoise(2);
-    const kick=t=>{const o=AC.createOscillator();o.frequency.setValueAtTime(130,t);
-      o.frequency.exponentialRampToValueAtTime(42,t+.1);
-      const g=mHit(out,t,{a:.002,d:.16,peak:.85});o.connect(g);o.start(t);o.stop(t+.2);};
-    const snare=t=>{const s=AC.createBufferSource();s.buffer=musicNoise;
-      const bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=2100;
-      const g=mHit(out,t,{d:.11,peak:.26});s.connect(bp);bp.connect(g);
-      s.start(t,Math.random()*.5);s.stop(t+.16);};
-    const hat=t=>{const s=AC.createBufferSource();s.buffer=musicNoise;
-      const hp=AC.createBiquadFilter();hp.type='highpass';hp.frequency.value=8200;
-      const g=mHit(out,t,{d:.07,peak:.12});s.connect(hp);hp.connect(g);
-      s.start(t,Math.random()*.5);s.stop(t+.1);};
-    const stab=(t,ms)=>{for(const m of ms){
-      const o=AC.createOscillator();o.type='sawtooth';o.frequency.value=MNOTE(m);
-      const g=mHit(out,t,{d:.13,peak:.06});o.connect(g);o.start(t);o.stop(t+.2);}};
-    const L=mLoop(bar,when=>{
-      for(let i=0;i<16;i++){
-        const t=when+i*bar/16;
-        if(i%4===0)kick(t);
-        if(i===4||i===12)snare(t);
-        if(i%4===2)hat(t);
-        const o=AC.createOscillator();o.type='sawtooth';o.frequency.value=MNOTE(28+SEQ[i]);
-        const lp=AC.createBiquadFilter();lp.type='lowpass';lp.Q.value=11;
-        lp.frequency.setValueAtTime(1400,t);
-        lp.frequency.exponentialRampToValueAtTime(180,t+bar/16*.9);
-        const g=mHit(out,t,{d:bar/16*.9,peak:.17});
-        o.connect(lp);lp.connect(g);o.start(t);o.stop(t+bar/16);
-      }
-      const ch=n%4<2?[52,55,59]:n%4<3?[48,52,55]:[50,54,57];
-      stab(when+bar*.375,ch);stab(when+bar*.875,ch);
-      if(n%8===7){ // riser into the drop
-        const s=AC.createBufferSource();s.buffer=musicNoise;
-        const bp=AC.createBiquadFilter();bp.type='bandpass';bp.Q.value=2;
-        bp.frequency.setValueAtTime(280,when);
-        bp.frequency.exponentialRampToValueAtTime(3800,when+bar);
-        const g=AC.createGain();
-        g.gain.setValueAtTime(.0001,when);
-        g.gain.linearRampToValueAtTime(.1,when+bar*.9);
-        g.gain.linearRampToValueAtTime(.0001,when+bar);
-        s.connect(bp);bp.connect(g);g.connect(out);
-        s.start(when,Math.random()*.5);s.stop(when+bar);
-      }
-      n++;
-    });
-    return{stop(){L.stop();}};
-  }};
-})();
-/* --- TRACK 5: LAST LIGHT (death screen · rain + sparse melody) --- */
-const TRACK_LASTLIGHT=(()=>{
-  const MELODY=[[76,0],[72,1],[67,2],[64,3.25],[67,4.5],[72,5.5]];
-  return{start(out){
-    const bar=4.44;let n=0;const nodes=[];
-    if(!musicNoise)musicNoise=mNoise(2);
-    const rain=AC.createBufferSource();rain.buffer=musicNoise;rain.loop=true;
-    const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=1500;
-    const g0=AC.createGain();g0.gain.value=.03;
-    rain.connect(lp);lp.connect(g0);g0.connect(out);rain.start();nodes.push(rain);
-    const L=mLoop(bar,(when,bs)=>{
-      mPad(out,when,[MNOTE(48),MNOTE(55),MNOTE(59),MNOTE(62)],
-        {type:'triangle',dur:bs*2,peak:.045,cutoff:620,a:2.4,r:3});
-      const ph=(n>>1)%2;
-      for(const p of MELODY){
-        if(ph===1&&p[0]===64)continue;
-        mPluck(out,when+ph*bs+p[1]*bs/4,MNOTE(p[0]),{bright:.28,gain:.14,dur:3.2});
-      }
-      n++;
-    });
-    return{stop(){L.stop();nodes.forEach(x=>{try{x.stop();}catch(err){}});}};
-  }};
-})();
-const MUSIC_TRACKS={redline:TRACK_REDLINE,diesel:TRACK_DIESEL,static:TRACK_STATIC,
-  overclock:TRACK_OVERCLOCK,lastlight:TRACK_LASTLIGHT};
-const Music={
-  id:null,handle:null,_g:null,bus:null,
-  ensure(){
-    initAudio();
-    if(!AC)return false;
-    if(!this.bus){this.bus=AC.createGain();this.bus.gain.value=.55;this.bus.connect(master);}
-    if(!musicNoise)musicNoise=mNoise(2);
-    if(AC.state==='suspended')AC.resume();
-    return true;
-  },
-  play(id,fade){
-    if(!this.ensure()||!MUSIC_TRACKS[id]||this.id===id)return;
-    this.stop(Math.max(.3,(fade??1.2)*.6));
-    const f=fade??1.2;
-    const g=AC.createGain();
-    g.gain.setValueAtTime(.0001,AC.currentTime);
-    g.gain.linearRampToValueAtTime(1,AC.currentTime+f);
-    g.connect(this.bus);
-    try{this.handle=MUSIC_TRACKS[id].start(g);}
-    catch(e){try{g.disconnect();}catch(err){}return;}
-    this._g=g;this.id=id;
-  },
-  stop(fade){
-    if(!this.handle)return;
-    fade=fade??.8;
-    const h=this.handle,g=this._g;
-    this.handle=null;this.id=null;this._g=null;
-    if(g&&AC){
-      g.gain.cancelScheduledValues(AC.currentTime);
-      g.gain.setValueAtTime(Math.max(.0001,g.gain.value),AC.currentTime);
-      g.gain.linearRampToValueAtTime(.0001,AC.currentTime+fade);
-    }
-    setTimeout(()=>{try{h.stop();}catch(e){}if(g)try{g.disconnect();}catch(e){}},fade*1000+250);
-  },
-};
-function mapTrackId(){
-  if(mode==='coop')return 'diesel';
-  if(isSoloZombies()||(map&&map.id==='frostline'))return 'diesel';
-  if(horrorMode)return 'static';
-  return 'overclock';
-}
-let musicKicked=false;
-function musicKick(){
-  if(musicKicked)return;
-  musicKicked=true;
-  if(state==='menu')Music.play('redline');
-  else if(state==='playing')Music.play(mapTrackId());
-}
-addEventListener('pointerdown',musicKick,{passive:true});
-addEventListener('keydown',musicKick,{passive:true});
-
 /* ============ GAME STATE ============ */
 let state='menu';
 let map=null;
 let round=1,budget=0,spawnT=0,interT=0,roundState='idle';
-let enemies=[],ePool={s0:[],s1:[],anc:[],boss:[],zom:[]};
+let enemies=[],ePool={s0:[],s1:[],anc:[],boss:[]};
 let colliders=[],lockedZones=[],spawnPts=[],destructibles=[];
 let interactables=[],dynMeshes=[],interactCur=null;
 let points=500,inv=[],curW=0,fireT=0,reloadT=0;
@@ -2233,6 +1899,7 @@ const NET={
 };
 const LOBBY_API=window.REDLINE_LOBBY_API||'';
 function netStatus(msg){const el=$('coopStatus');if(el)el.textContent=msg;}
+function lobbyStatus(){return LOBBY_API?'LOBBY SERVICE READY':'LOBBY SERVICE NOT CONFIGURED';}
 async function refreshLobbies(){
   const el=$('lobbyList');
   if(!LOBBY_API){el.textContent='SET REDLINE_LOBBY_API TO ENABLE PUBLIC LOBBY DISCOVERY';return;}
@@ -2398,7 +2065,7 @@ function coopCheckWipe(){
     const s=NET.players[id];
     if(s&&!s.down)return false;
   }
-  return true;
+  return true; // host is down and no connected client reports being up
 }
 function netApplyEnemySnapshot(list){
   const seen=new Set();
@@ -2410,11 +2077,8 @@ function netApplyEnemySnapshot(list){
       e={nid:s.nid,kind:s.kind,team:s.team,pos:new THREE.Vector3(s.x,0,s.z),
         h:(s.kind==='boss'?3.1:1.85)*scale,
         bodyR:(s.kind==='boss'?.85:.5)*scale,headR:(s.kind==='boss'?.36:.24)*scale,
-        hp:s.hp,maxHp:s.maxHp,dead:false,deadT:0,riseT:0,flinchT:0,
-        fallDir:1,fallSide:0,
+        hp:s.hp,maxHp:s.maxHp,dead:false,deadT:0,
         mesh:getEnemyMesh(s.kind,s.team),netVisual:true};
-      e.baseScaleY=scale;
-      e.zom=!!e.mesh.userData.zombie;
       e.mesh.position.set(s.x,0,s.z);
       scene.add(e.mesh);
       enemies.push(e);
@@ -2436,11 +2100,8 @@ function updateEnemiesClientVisual(dt){
     if(!e.netVisual)continue;
     if(e.dead){
       e.deadT+=dt;
-      if(e.zom){
-        const fk=Math.min(1,e.deadT/.55),fe=1-Math.pow(1-fk,2.2);
-        e.mesh.rotation.x=e.fallDir*fe*1.5;
-        e.mesh.rotation.z=e.fallSide*.65*fe;
-      }else if(e.deadT<.5)e.mesh.rotation.x=-e.deadT*2.6;
+      if(e.deadT<.5)e.mesh.rotation.x=-e.deadT*2.6;
+      else if(e.deadT<1.4)e.mesh.position.y=-(e.deadT-.5)*.8;
       continue;
     }
     if(e._tx!==undefined){
@@ -3155,10 +2816,9 @@ function tryFire(){
   const W=WEAPONS[w.id],E=effStats(w);
   if(reloadT>0){fireQueued=false;return;}
   if(fireT>0)return;
-  const tFire=touchState.fire||touchState.fireSlide;
-  const want=mouseDown||tFire||PAD.fire;
+  const want=mouseDown||touchState.fire||PAD.fire;
   if(!want)return;
-  if(!W.auto&&!fireQueued&&!tFire)return;
+  if(!W.auto&&!fireQueued&&!touchState.fire)return;
   if(w.mag<=0){
     fireQueued=false;
     if(settings.autoReload)startReload();
@@ -3550,86 +3210,8 @@ function buildAncient(){
   const e2=e1.clone();e2.position.x=.06;g.add(e2);
   return g;
 }
-/* ---- real zombie models — melee-only, no guns, glowing eyes ---- */
-const ZOM_SKINS=[0x93a184,0x86957c,0x9fa287,0x7d8b74];
-const ZOM_SHIRTS=[0x413a30,0x323840,0x4d3b2b,0x3a4042];
-const ZOM_PANTS=[0x2c2a26,0x33393d,0x3d3229];
-function buildZombie(kind){
-  const g=new THREE.Group();
-  const skinM=reg(new THREE.MeshStandardMaterial({color:ZOM_SKINS[(Math.random()*4)|0],
-    roughness:.92,flatShading:true}));
-  const shirtM=reg(new THREE.MeshStandardMaterial({color:ZOM_SHIRTS[(Math.random()*4)|0],
-    roughness:.95,flatShading:true}));
-  const pantM=reg(new THREE.MeshStandardMaterial({color:ZOM_PANTS[(Math.random()*3)|0],
-    roughness:.95,flatShading:true}));
-  const eyeM=new THREE.MeshBasicMaterial({
-    color:kind==='screamer'?0xff3020:kind==='brute'?0xff4020:0xffb545});
-  const runner=kind==='screamer';
-  const M=(geo,m,x,y,z,parent)=>{const q=new THREE.Mesh(geo,m);
-    q.position.set(x,y,z);q.castShadow=!isMobile();(parent||g).add(q);return q;};
-  M(new THREE.BoxGeometry(.34,.2,.24),pantM,0,.98,0);
-  const torso=new THREE.Group();
-  torso.position.y=1.08;
-  torso.rotation.x=runner?.5:.34+rnd(0,.14); // hunched shamble posture
-  g.add(torso);
-  const chest=M(new THREE.CapsuleGeometry(.21,.36,4,8),shirtM,0,.2,0,torso);
-  chest.scale.z=.8;
-  M(new THREE.BoxGeometry(.3,.14,.06),shirtM,0,.02,.15,torso); // hanging rags
-  const head=new THREE.Group();
-  head.position.set(0,.46,.06);
-  const headZ=rnd(-.22,.22);
-  head.rotation.z=headZ;
-  torso.add(head);
-  M(new THREE.BoxGeometry(.24,.26,.24),skinM,0,.12,0,head);
-  const jaw=M(new THREE.BoxGeometry(.17,.06,.18),skinM,0,0,.1,head);
-  const e1=M(new THREE.BoxGeometry(.05,.035,.02),eyeM,-.055,.17,.115,head);
-  const e2=e1.clone();e2.position.x=.055;head.add(e2);
-  const mkArm=sx=>{
-    const p=new THREE.Group();p.position.set(.27*sx,.38,0);torso.add(p);
-    const up=new THREE.Mesh(new THREE.CapsuleGeometry(.06,.3,4,8),shirtM);
-    up.position.y=-.18;up.castShadow=!isMobile();p.add(up);
-    const lo=new THREE.Mesh(new THREE.CapsuleGeometry(.055,.28,4,8),skinM);
-    lo.position.y=-.46;lo.castShadow=!isMobile();p.add(lo);
-    M(new THREE.BoxGeometry(.09,.07,.12),skinM,0,-.62,.03,p);
-    p.rotation.x=-1.15;p.rotation.z=sx*.12; // arms reaching forward
-    return p;
-  };
-  const la=mkArm(-1),ra=mkArm(1);
-  const mkLeg=sx=>{
-    const p=new THREE.Group();p.position.set(.12*sx,.9,0);g.add(p);
-    const up=new THREE.Mesh(new THREE.CapsuleGeometry(.075,.4,4,8),pantM);
-    up.position.y=-.26;up.castShadow=!isMobile();p.add(up);
-    const lo=new THREE.Mesh(new THREE.CapsuleGeometry(.065,.38,4,8),pantM);
-    lo.position.y=-.62;lo.castShadow=!isMobile();p.add(lo);
-    M(new THREE.BoxGeometry(.11,.07,.2),pantM,0,-.85,.04,p);
-    return p;
-  };
-  const ll=mkLeg(-1),rl=mkLeg(1);
-  g.userData={ll,rl,la,ra,head,jaw,eyes:[e1,e2],headZ,zombie:kind};
-  return g;
-}
-function zModeNow(){return isSoloZombies()||roundIsHorror(round)||horrorMode;}
-function zomFromPool(kind){
-  let m;
-  if(ePool.zom.length)m=ePool.zom.pop();
-  else m=buildZombie(kind);
-  if(m.userData.zombie!==kind&&m.userData.eyes){
-    const c=kind==='screamer'?0xff3020:kind==='brute'?0xff4020:0xffb545;
-    m.userData.eyes[0].material.setHex(c);
-  }
-  m.userData.zombie=kind;
-  return m;
-}
 function meshFor(kind,team){
-  const zMode=zModeNow();
-  if(kind==='boss'){
-    if(!zMode)return ePool.boss.length?ePool.boss.pop():buildBoss();
-    return zomFromPool('brute');
-  }
-  if(zMode){
-    if(kind==='screamer')return zomFromPool('runner');
-    if(kind==='ancient')return zomFromPool('walker');
-  }
+  if(kind==='boss')return buildBoss();
   if(kind==='shield')return buildShield();
   if(kind==='marksman')return buildMarksman();
   if(kind==='screamer')return buildScreamer();
@@ -3638,9 +3220,7 @@ function meshFor(kind,team){
   return ePool[key].length?ePool[key].pop():buildSoldier(team);
 }
 function poolKeyOf(kind,team){
-  const zMode=zModeNow();
-  if(kind==='boss')return zMode?'zom':'boss';
-  if(zMode&&(kind==='ancient'||kind==='screamer'))return 'zom';
+  if(kind==='boss')return 'boss';
   if(kind==='ancient')return 'anc';
   return team===1?'s1':'s0';
 }
@@ -3708,7 +3288,6 @@ function spawnEnemy(kind,team){
     role:Math.random()<.28?'flanker':'assault',flankSide:Math.random()<.5?-1:1,phase:1,
     coverT:rnd(2,5),cover:null,
     buffT:0,screamT:rnd(2,5),tellT:0,beam:null,
-    flinchT:0,fallDir:1,fallSide:0,
     name:'GRUNT',
   };
   if(kind==='ancient')e.riseT=.6;
@@ -3719,13 +3298,11 @@ function spawnEnemy(kind,team){
   if(boss){
     e.maxHp=e.hp=550*(1+.18*(round-1));
     e.speed=3.2;SFX.roar();
-    e.name=zModeNow()?'THE ABOMINATION':'THE WARDEN';
-    $('bossName').textContent=e.name;
-    announce(e.name,'BOSS ROUND');
+    announce('THE WARDEN','BOSS ROUND');
   }else if(kind==='screamer'){
     e.maxHp=e.hp=60*(1+.18*(round-1));
     e.speed=4.2;
-    e.name=zModeNow()?'RUNNER':'SCREAMER';
+    e.name='SCREAMER';
   }else if(kind==='marksman'){
     e.maxHp=e.hp=80*(1+.2*(round-1));
     e.speed=3.2;
@@ -3744,7 +3321,7 @@ function spawnEnemy(kind,team){
     e.maxHp=e.hp=70*(1+.2*(round-1));
     e.sprint=Math.random()<.3;
     e.speed=e.sprint?rnd(6,7.4):rnd(3.8,5);
-    e.name=zModeNow()?'WALKER':'HUSK';
+    e.name='HUSK';
   }else if(team===1){
     e.maxHp=e.hp=100;e.speed=rnd(3.6,4.6);
     e.name='V-'+((Math.random()*90+10)|0);
@@ -3756,8 +3333,6 @@ function spawnEnemy(kind,team){
     e.speed=rnd(3.2,4.4);
   }
   e.mesh.scale.setScalar(scale);
-  e.zom=!!e.mesh.userData.zombie;
-  e.baseScaleY=scale;
   e.mesh.position.copy(e.pos);
   scene.add(e.mesh);
   if(kind==='ancient'){e.mesh.scale.y=.01;SFX.growl();burst(e.pos,0x554a3c,6,2.5,.1);}
@@ -3768,25 +3343,21 @@ function damageEnemy(e,dmg,head,byPlayer,src){
   if(e.dead||state!=='playing')return '';
   if(NET.online&&!NET.isHost&&byPlayer){
     TMP_V.set(e.pos.x,e.pos.y+e.h*.6,e.pos.z);
-    burst(TMP_V,e.zom?0x5a1210:0x7a1e14,4,3,.07);
+    burst(TMP_V,e.kind==='ancient'?0x3a3028:0x7a1e14,4,3,.07);
     if(NET.hostConn)netSend(NET.hostConn,{t:'hit',nid:e.nid,dmg,head:!!head});
     return 'hit';
   }
   if(e.kind==='boss')dmg*=.8;
   if(byPlayer&&pu.insta>0)dmg=99999;
   e.hp-=dmg;
-  e.flinchT=.16;
   TMP_V.set(e.pos.x,e.pos.y+e.h*.6,e.pos.z);
-  burst(TMP_V,e.zom?0x5a1210:0x7a1e14,4,3,.07);
+  burst(TMP_V,e.kind==='ancient'?0x3a3028:0x7a1e14,4,3,.07);
   if(e.hp<=0){
     e.dead=true;e.deadT=0;
-    e.fallDir=Math.random()<.7?1:-1;
-    e.fallSide=rnd(-1,1);
     if(e.kind==='boss'){
       bossRef=null;
       gainPts(800);SFX.kill();hitmark(true);
-      Music.play(mapTrackId());
-      announce(e.name+' DOWN','+800');
+      announce('WARDEN DOWN','+800');
       spawnDrop(e.pos.x,e.pos.z,PUP_KEYS[(Math.random()*4)|0]);
       updMoney();
     }else if(byPlayer||src){
@@ -3840,30 +3411,15 @@ function updateEnemies(dt){
     if(e.dead){
       e.deadT+=dt;
       if(e.beam)e.beam.material.opacity=0;
-      if(e.zom){
-        // crumple sideways, arms thrown up, jaw slack
-        const fk=Math.min(1,e.deadT/.55),fe=1-Math.pow(1-fk,2.2);
-        e.mesh.rotation.x=e.fallDir*fe*1.5;
-        e.mesh.rotation.z=e.fallSide*.65*fe;
-        if(ud.la)ud.la.rotation.x=-2.1*fe;
-        if(ud.ra)ud.ra.rotation.x=-2.3*fe;
-        if(ud.jaw)ud.jaw.rotation.x=.55*fe;
-      }else if(e.deadT<.5)e.mesh.rotation.x=-e.deadT*2.6;
-      if(e.deadT>=.5&&e.deadT<1.4)e.mesh.position.y=-(e.deadT-.5)*.8;
-      else if(e.deadT>=1.4){
+      if(e.deadT<.5)e.mesh.rotation.x=-e.deadT*2.6;
+      else if(e.deadT<1.4)e.mesh.position.y=-(e.deadT-.5)*.8;
+      else{
         if(e.team>=0&&isTDM())respawnBot(e);
         else{releaseEnemyMesh(e);enemies.splice(i,1);}
       }
       continue;
     }
     if(e.buffT>0)e.buffT-=dt;
-    if(e.riseT>0){ // clawing up out of the ground
-      e.riseT-=dt;
-      const k=clamp(1-Math.max(0,e.riseT)/.6,0,1);
-      e.mesh.scale.y=Math.max(.03,e.baseScaleY*k);
-      if(e.riseT<=0)e.mesh.scale.y=e.baseScaleY;
-    }
-    if(e.flinchT>0)e.flinchT=Math.max(0,e.flinchT-dt);
     let tgtObj=null,attackPlayer=false,humanTgt=null;
     if(e.kind==='boss'){
       humanTgt=NET.online?pickNearestHuman(e.pos):(!pDead?{x:player.pos.x,y:player.pos.y,z:player.pos.z,eye:player.eye,id:null}:null);
@@ -3900,7 +3456,7 @@ function updateEnemies(dt){
       if(nextPhase>e.phase){
         e.phase=nextPhase;
         e.speed*=1.12;
-        announce(e.name+' — PHASE '+nextPhase,'REINFORCEMENTS INBOUND');
+        announce('WARDEN PHASE '+nextPhase,'REINFORCEMENTS INBOUND');
         SFX.roar();
         for(let n=0;n<nextPhase;n++)spawnEnemy(n%2?'shield':'screamer',-1);
         if(nextPhase===3)explode(e.pos.clone(),true);
@@ -4040,12 +3596,9 @@ function updateEnemies(dt){
     }
     e.mesh.position.set(e.pos.x,e.pos.y,e.pos.z);
     if(hasTgt)e.mesh.rotation.y=Math.atan2(-dx,-dz);
-    if(!(ud.zombie&&e.swingT<=0&&e.riseT<=0)){
-      // zombies set rotation.z themselves in their animation block
-      if((melee||e.kind==='screamer')&&!e.dead)
-        e.mesh.rotation.z=Math.sin(now*1.7+e.walkT)*.04;
-      else if(!e.dead&&!ud.zombie)e.mesh.rotation.z*=1-Math.min(1,6*dt);
-    }
+    if((melee||e.kind==='screamer')&&!e.dead)
+      e.mesh.rotation.z=Math.sin(now*1.7+e.walkT)*.04;
+    else if(!e.dead)e.mesh.rotation.z*=1-Math.min(1,6*dt);
     const moving=mvx*mvx+mvz*mvz>.1||e.chState==='charging';
     if(moving){
       e.walkT+=dt*((melee||e.kind==='boss')&&(e.sprint||e.chState==='charging')?13:8);
@@ -4071,37 +3624,6 @@ function updateEnemies(dt){
       }else{
         ud.gun.position.z=-.26;
         ud.ra.rotation.x=-1.15;
-      }
-    }
-    /* ---- zombie behavior animation: rise pose, reach, lunge, flinch ---- */
-    if(ud.zombie){
-      const run=ud.zombie==='runner';
-      const gait=e.walkT*(run?1.5:1);
-      if(e.riseT>0){
-        if(ud.la)ud.la.rotation.x=-2.5;
-        if(ud.ra)ud.ra.rotation.x=-2.6;
-        if(ud.jaw)ud.jaw.rotation.x=.5;
-        if(ud.head){ud.head.rotation.z=(ud.headZ||0);ud.head.rotation.x=0;}
-      }else if(e.swingT>0){
-        // two-arm lunge + jaw snap
-        const sk=Math.max(0,e.swingT)/.3;
-        if(ud.la)ud.la.rotation.x=-.4-sk*1.6;
-        if(ud.ra)ud.ra.rotation.x=-.3-sk*1.7;
-        if(ud.jaw)ud.jaw.rotation.x=.35+sk*.45;
-        e.mesh.rotation.x=-sk*.14;
-      }else{
-        const reach=clamp(1-(dist-1.6)/3,0,1); // arms rise as it closes in
-        const pump=run?Math.sin(gait)*.8:Math.sin(gait*.5)*.14;
-        if(ud.la)ud.la.rotation.x=-1.15-reach*.55+pump;
-        if(ud.ra)ud.ra.rotation.x=-1.02-reach*.55-pump;
-        if(ud.jaw)ud.jaw.rotation.x=.1+Math.max(0,Math.sin(now*6+e.walkT))*.07
-          +reach*.12;
-        if(ud.head){
-          ud.head.rotation.z=(ud.headZ||0)+Math.sin(now*1.2+e.walkT)*.15;
-          ud.head.rotation.x=Math.sin(gait*.5+.4)*.1-(run?.25:0)+e.flinchT*2.2;
-        }
-        e.mesh.rotation.z=Math.sin(now*1.7+e.walkT)*(run?.06:.04)+e.flinchT*.5;
-        e.mesh.rotation.x*=1-Math.min(1,8*dt);
       }
     }
     if(e.kind==='marksman'&&e.beam){
@@ -4646,11 +4168,13 @@ function buildDetail(H){
   buildMountains();
   buildCrane(H*1.35,H*.9);
   buildMast(-H*1.2,-H*1.3);
+  /* parked vans outside the arena */
   for(let i=0;i<3;i++){
     const a=rnd(6.28);
     const r=H+rnd(4,9);
     buildVan(Math.cos(a)*r,Math.sin(a)*r,rnd(6.28));
   }
+  /* shipping containers as cover inside */
   let placed=0,guard=0;
   while(placed<3&&guard++<40){
     const x=rnd(-H+12,H-12),z=rnd(-H+12,H-12);
@@ -4663,12 +4187,15 @@ function buildDetail(H){
     buildContainer(x,z,Math.random()<.5?0:Math.PI/2,(Math.random()*CONTAINER_COLORS.length)|0);
     placed++;
   }
+  /* light poles */
   buildPole(-H*.55,H*.72);
   buildPole(H*.6,H*.5);
   buildPole(-H*.62,-H*.45);
   buildPole(H*.5,-H*.7);
+  /* caution signs near spawn side */
   buildSign(H*.3,H-2.4,Math.PI);
   buildSign(-H*.3,-(H-2.4),0);
+  /* pipes along walls */
   const pipeLen=H*2-4;
   for(const side of[0,1,2,3]){
     for(const[py,pr]of[[2.0,.05],[2.3,.032]]){
@@ -4680,6 +4207,7 @@ function buildDetail(H){
       worldClean.add(p);
     }
   }
+  /* barrels */
   for(let i=0;i<10;i++){
     const cv=map.covers[(Math.random()*map.covers.length)|0];
     if(!cv)break;
@@ -4698,6 +4226,7 @@ function buildDetail(H){
     worldClean.add(rim);
     addCol(colliders,bx,bz,.7,.7,1,'met');
   }
+  /* cables between divider tops */
   const dv=map.dividers;
   let made=0;
   for(let i=0;i<dv.length&&made<4;i++){
@@ -4716,6 +4245,7 @@ function buildDetail(H){
       made++;
     }
   }
+  /* puddles */
   const puddleCount=map.theme==='field'?8:18;
   for(let i=0;i<puddleCount;i++){
     let x=rnd(-H+4,H-4),z=rnd(-H+4,H-4),g2=0;
@@ -4725,6 +4255,7 @@ function buildDetail(H){
     m.position.set(x,.012,z);
     worldClean.add(m);
   }
+  /* debris chunks near walls */
   for(let i=0;i<16;i++){
     const a=rnd(6.28),r=H-rnd(1.8,3.4);
     const m=new THREE.Mesh(TETRA,Math.random()<.5?MAT.block2:OLDMAT.rust);
@@ -4733,6 +4264,7 @@ function buildDetail(H){
     m.rotation.set(rnd(6.28),rnd(6.28),rnd(6.28));
     worldClean.add(m);
   }
+  /* mid-ground skyline */
   for(let i=0;i<16;i++){
     const a=(i/16)*Math.PI*2+rnd(.2);
     const r=H*2.15+rnd(-10,20);
@@ -4742,6 +4274,7 @@ function buildDetail(H){
     m.rotation.y=rnd(6.28);
     worldClean.add(m);
   }
+  /* clouds near horizon */
   if(!clouds.length){
     for(let i=0;i<9;i++){
       const s=new THREE.Sprite(new THREE.SpriteMaterial({map:smokeTex,
@@ -5010,6 +4543,7 @@ function buildWorld(){
   grid.material.transparent=true;grid.material.opacity=.1;
   grid.position.y=.02;
   worldClean.add(grid);
+  /* low perimeter barriers — the vista stays open */
   const wall=(x,z,sx,sz,h,grp,mat,mt)=>{
     const m=new THREE.Mesh(new THREE.BoxGeometry(sx,h,sz),mat);
     m.position.set(x,h/2,z);m.castShadow=!isMobile();m.receiveShadow=true;grp.add(m);
@@ -5350,7 +4884,7 @@ function openWorkshop(){
   shopOpen=true;
   state='shop';
   mouseDown=false;fireQueued=false;adsHeld=false;
-  touchState.fire=false;touchState.fireSlide=false;touchState.ads=false;
+  touchState.fire=false;touchState.ads=false;
   if(document.pointerLockElement)document.exitPointerLock();
   buildShopUI();
   pvRebuild();
@@ -5499,12 +5033,18 @@ function padShape(v,dead,curve){
   return Math.sign(v)*Math.pow(n,curve);
 }
 function padVibe(strong,weak,dur){
-  if(!settings.padVibe||!padOn)return;
+  if(!settings.padVibe)return;
   const gp=gpGet();
-  if(!gp||!gp.vibrationActuator)return;
+  if(!gp)return;
+  const actuator=gp.vibrationActuator||gp.hapticActuators?.[0];
+  if(!actuator)return;
   try{
-    gp.vibrationActuator.playEffect('dual-rumble',
-      {duration:dur,strongMagnitude:clamp(strong,0,1),weakMagnitude:clamp(weak,0,1)});
+    if(typeof actuator.playEffect==='function'){
+      actuator.playEffect('dual-rumble',
+        {duration:dur,strongMagnitude:clamp(strong,0,1),weakMagnitude:clamp(weak,0,1)});
+    }else if(typeof actuator.pulse==='function'){
+      actuator.pulse(clamp(Math.max(strong,weak),0,1),dur);
+    }
   }catch(e){}
 }
 function pollPad(rdt){
@@ -5928,7 +5468,6 @@ function startRound(n){
   announce('ROUND '+String(n).padStart(2,'0'),
     bossPending?'BOSS INCOMING':horrorMode?'THEY REMEMBER YOU':'HORDE ×2');
   SFX.sting();
-  if(bossPending)Music.play('overclock');
 }
 function clearCorruption(){
   if(corrIv){clearInterval(corrIv);corrIv=null;}
@@ -5963,7 +5502,6 @@ function runCorruption(){
         decayTarget=1;decayRate=.18;
         roundState='fight';
         announce('ROUND 06','HORDE ×2');
-        Music.play('static');
         SFX.sting();
       },1100);
     }
@@ -6289,29 +5827,17 @@ function tbtn(id,down,up){
     try{el.setPointerCapture(e.pointerId);}catch(err){}
     el.classList.add('held');
     if(AC)AC.resume();
-    down(e);
+    down();
   });
   const off=e=>{
     e.preventDefault();
     el.classList.remove('held');
-    if(up)up(e);
+    if(up)up();
   };
   el.addEventListener('pointerup',off);
   el.addEventListener('pointercancel',off);
 }
-/* FIRE button doubles as a look-stick: hold to shoot, drag to turn */
-const fireSteer={id:-1,x:0,y:0};
-tbtn('tbFire',e=>{
-  touchState.fire=true;
-  if(e){fireSteer.id=e.pointerId;fireSteer.x=e.clientX;fireSteer.y=e.clientY;}
-},()=>{touchState.fire=false;fireSteer.id=-1;});
- $('tbFire').addEventListener('pointermove',e=>{
-  if(e.pointerId!==fireSteer.id)return;
-  touchState.ldx+=e.clientX-fireSteer.x;
-  touchState.ldy+=e.clientY-fireSteer.y;
-  fireSteer.x=e.clientX;fireSteer.y=e.clientY;
-  e.preventDefault();
-});
+tbtn('tbFire',()=>touchState.fire=true,()=>touchState.fire=false);
 tbtn('tbAds',()=>touchState.ads=true,()=>touchState.ads=false);
 tbtn('tbFocus',()=>touchState.focus=true,()=>touchState.focus=false);
 tbtn('tbSlide',()=>touchState.crouchHold=true,()=>touchState.crouchHold=false);
@@ -6362,14 +5888,9 @@ lookZone.addEventListener('pointermove',e=>{
   touchState.ldx+=e.clientX-look.lx;
   touchState.ldy+=e.clientY-look.ly;
   look.lx=e.clientX;look.ly=e.clientY;
-  const fr=$('tbFire').getBoundingClientRect();
-  touchState.fireSlide=e.clientX>=fr.left&&e.clientX<=fr.right&&
-    e.clientY>=fr.top&&e.clientY<=fr.bottom;
   e.preventDefault();
 });
-const lookEnd=e=>{
-  if(e.pointerId===look.id){look.id=-1;touchState.fireSlide=false;}
-};
+const lookEnd=e=>{if(e.pointerId===look.id)look.id=-1;};
 lookZone.addEventListener('pointerup',lookEnd);
 lookZone.addEventListener('pointercancel',lookEnd);
 
@@ -6520,7 +6041,6 @@ function startGame(){
   $('hud').classList.add('on');
   document.body.classList.add('playing');
   state='playing';
-  Music.play(mapTrackId());
   if(!isMobile())lockPointer();
 }
 function pauseGame(){
@@ -6542,7 +6062,6 @@ function resumeGame(){
 }
 function endGame(win){
   state='dead';
-  Music.play('lastlight');
   mouseDown=false;fireQueued=false;adsHeld=false;
   if(document.pointerLockElement)document.exitPointerLock();
   lbPush(mode,map,round);
@@ -6567,7 +6086,6 @@ function endGame(win){
 }
 function toMenu(){
   state='menu';
-  Music.play('redline');
   shopOpen=false;$('shopOv').style.display='none';
   padSetFocus(-1);padMenuEls=[];padMenuOvKey=null;
   clearCorruption();
@@ -6636,7 +6154,7 @@ function buildMenu(){
     `<b>USE / RELOAD / FRAG</b> ${B('interact')} / ${B('reload')} / ${B('frag')}<br>`+
     `<b>STREAKS</b> 4 = UAV · 5 = MORTAR (earn kills)<br>`+
     `<b>CONTROLLER</b> ${PAD_BTN_NAMES[settings.padBinds.fire]} fire · ${PAD_BTN_NAMES[settings.padBinds.ads]} ADS · fully remappable in Settings<br>`+
-    `<span class="w">MOBILE: HOLD FIRE + DRAG TO TURN WHILE SHOOTING</span>`;
+    `<span class="w">MOBILE: TOUCH CONTROLS ENABLED AUTOMATICALLY</span>`;
   lbRender();
 }
  $('cfgSize').oninput=e=>{
@@ -6811,7 +6329,7 @@ function buildSettingsUI(){
   toggle('FPS Counter','fps');
   slider('Volume','vol',0,1,.05,v=>Math.round(v*100)+'%');
   toggle('Film FX (horror)','filmFx');
-  slider('Zombie Brightness','bright',.5,3,.05,v=>v.toFixed(2)+'×');
+  slider('Horror Brightness','bright',.6,1.6,.05,v=>v.toFixed(2));
   toggle('Compass','compass');
   toggle('Navigation Debug','navDebug');
   const row=document.createElement('div');row.className='srow';

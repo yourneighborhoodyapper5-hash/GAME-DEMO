@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>REDLINE — build 1.0.3</title>
+<title>REDLINE — build 1.0.4</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -441,6 +441,30 @@
   #setFoot{padding:13px 26px;border-top:2px solid var(--ink);display:flex;
     justify-content:space-between;align-items:center}
   #setFoot .hint{font-size:10px;letter-spacing:.25em;opacity:.5}
+
+  /* ============ CUTSCENES ============ */
+  #cineTop,#cineBot{position:fixed;left:0;right:0;height:0;background:#000;z-index:40;
+    transition:height .6s cubic-bezier(.4,0,.2,1);pointer-events:none}
+  #cineTop{top:0}#cineBot{bottom:0}
+  body.cine #cineTop,body.cine #cineBot{height:11vh}
+  #cineSub{position:fixed;left:50%;bottom:13vh;transform:translateX(-50%);
+    max-width:80vw;text-align:center;z-index:41;display:none;pointer-events:none}
+  #cineSub b{color:var(--red);letter-spacing:.25em;font-size:11px;display:block;
+    margin-bottom:5px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+  #cineSub span{font-size:15px;letter-spacing:.05em;color:var(--hud);
+    text-shadow:0 2px 8px rgba(0,0,0,.9)}
+  #cineTitle{position:fixed;left:0;right:0;top:34%;text-align:center;z-index:41;
+    font-family:'Archivo Black',sans-serif;font-size:clamp(30px,7vw,84px);color:var(--paper);
+    text-transform:uppercase;opacity:0;transform:scale(1.06);
+    transition:opacity .5s,transform .8s cubic-bezier(.2,1.4,.4,1);pointer-events:none;
+    text-shadow:0 4px 24px rgba(0,0,0,.7)}
+  #cineTitle.on{opacity:1;transform:scale(1)}
+  #cineTitle small{display:block;font:700 12px 'IBM Plex Mono',monospace;color:var(--red);
+    letter-spacing:.5em;margin-top:10px}
+  #cineSkip{position:fixed;right:20px;bottom:12.5vh;z-index:41;font-size:9px;
+    letter-spacing:.3em;color:rgba(242,240,234,.5);display:none;pointer-events:none;
+    font-family:'IBM Plex Mono',monospace}
+  body.cine #cineSkip{display:block}
 </style>
 </head>
 <body>
@@ -532,7 +556,7 @@
 
 <div id="menu" class="ov">
   <div id="menuTop">
-    <span>REDLINE <b>/</b> BUILD 1.0.3</span>
+    <span>REDLINE <b>/</b> BUILD 1.0.4</span>
     <span>6 MODES · 6 MAPS</span>
   </div>
   <div id="tag">CHOOSE HOW IT ENDS.</div>
@@ -738,7 +762,7 @@ const PAD_BINDS=[
 const CH_COLORS=['#f2f0ea','#ff2418','#00e07a','#2f8fff','#ffffff','#ffd23d'];
 const DEFAULTS={
   sens:1.0,invertY:false,fov:78,autoReload:true,bob:true,shake:1.0,
-  crosshair:true,fps:false,vol:.42,filmFx:true,bright:1.0,compass:true,
+  crosshair:true,fps:false,vol:.42,filmFx:true,bright:1.35,compass:true,
   ctrlMode:'auto',minimap:true,
   chSize:9,chGap:8,chColor:'#f2f0ea',cbSafe:false,navDebug:false,
   padSens:1.0,padDeadL:.15,padDeadR:.12,padCurve:1.8,padVert:.85,
@@ -749,8 +773,10 @@ const DEFAULTS={
 function loadSettings(){
   try{
     const s=JSON.parse(localStorage.getItem('redline_cfg')||'{}');
-    return{...DEFAULTS,...s,binds:{...DEFAULTS.binds,...(s.binds||{})},
+    const m={...DEFAULTS,...s,binds:{...DEFAULTS.binds,...(s.binds||{})},
       padBinds:{...DEFAULTS.padBinds,...(s.padBinds||{})}};
+    if(s.bright===undefined||s.bright===1)m.bright=DEFAULTS.bright; // migrate old saves
+    return m;
   }catch(e){return JSON.parse(JSON.stringify(DEFAULTS));}
 }
 const settings=loadSettings();
@@ -783,6 +809,7 @@ function applySettings(){
   $('mm').style.display=settings.minimap?'block':'none';
   $('navDebug').style.display=settings.navDebug?'block':'none';
   document.body.classList.toggle('cb',settings.cbSafe);
+  if(renderer&&hemiL)applyExposure();
   applyCrosshair();
   applyControlMode();
 }
@@ -840,10 +867,6 @@ flashLight=new THREE.PointLight(0xffdcae,0,11,2);
 scene.add(flashLight);
 
 /* ============ POST-PROCESSING (tuned to run on an iPad-class GPU) ============ */
-// Deliberately skipping SSAO/SMAA passes — both are common causes of a "realistic"
-// web shooter dropping below 30fps on A-series/mobile GPUs. A single, cheap,
-// high-threshold bloom pass gets most of the visible "real light" payoff for
-// almost none of the cost, so it stays on for every device.
 let composer=null,bloomPass=null;
 function buildComposer(){
   composer=new EffectComposer(renderer);
@@ -853,7 +876,7 @@ function buildComposer(){
     isMobile()?innerWidth*0.55:innerWidth,
     isMobile()?innerHeight*0.55:innerHeight);
   bloomPass=new UnrealBloomPass(bloomRes,isMobile()?.38:.55,.4,.88);
-  bloomPass.threshold=.88; // only true highlights bloom — muzzle flash/emissive signs, not the whole scene
+  bloomPass.threshold=.88;
   bloomPass.strength=isMobile()?.38:.55;
   bloomPass.radius=.3;
   composer.addPass(bloomPass);
@@ -887,7 +910,7 @@ addEventListener('resize',()=>{
   }
 });
 
-/* ============ LIGHT SHAFT + DUST (cheap: one mesh, tiered point count) ============ */
+/* ============ LIGHT SHAFT + DUST ============ */
 const shaftMat=new THREE.MeshBasicMaterial({color:0xffdba0,transparent:true,
   opacity:.045,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,fog:false});
 const shaftMesh=new THREE.Mesh(new THREE.CylinderGeometry(.5,24,200,8,1,true),shaftMat);
@@ -914,7 +937,7 @@ function updateAtmosphere(dt,t){
   shaftMesh.rotateX(Math.PI/2);
   shaftMat.opacity=.045*(1-decayK*.7)*skyMat.uniforms.sunI.value;
   if(isSoloZombies())updateZombieFires(t);
-  if((dustSkip=(dustSkip+1)&1))return; // update every other frame on all devices, cheap enough either way
+  if((dustSkip=(dustSkip+1)&1))return;
   const a=dustGeo.attributes.position.array;
   for(let i=0;i<DUST_N;i++){
     a[i*3]+=Math.sin(t*.3+i)*dt*.3;
@@ -936,7 +959,7 @@ function tickAdaptive(dt){
     renderer.setPixelRatio(NORMAL_PR*dynScale);}
 }
 
-/* ============ SKY DOME (custom shader, sunset) ============ */
+/* ============ SKY DOME ============ */
 const SKY_CLEAN={top:new THREE.Color(0x2e4f86),mid:new THREE.Color(0xc9713d),
   bot:new THREE.Color(0xffc27a),sun:new THREE.Color(0xfff0cf),sunI:1};
 const SKY_DARK={top:new THREE.Color(0x04060a),mid:new THREE.Color(0x0a0d12),
@@ -991,7 +1014,7 @@ const sunSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:(()=>{
 sunSpr.scale.setScalar(170);
 scene.add(sunSpr);
 
-/* environment reflections from gradient canvases */
+/* environment reflections */
 let envClean=null,envDark=null,envDarkState=false;
 try{
   function makeEnv(top,bot,sun){
@@ -1427,6 +1450,15 @@ let worldClean=null,worldAncient=null;
 const _cA=new THREE.Color(),_cB=new THREE.Color();
 function lerpHex(col,a,b,k){_cA.setHex(a);_cB.setHex(b);col.copy(_cA).lerp(_cB,k);}
 let ashPts=null,rainPts=null,clouds=[],zombieFires=[];
+/* live darkness lighting — driven by the Zombie Brightness slider */
+function applyExposure(){
+  const k=decayK,b=clamp(settings.bright,.5,2.5);
+  renderer.toneMappingExposure=1.02-(1.02-b)*k;
+  hemiL.intensity=HEMI_BASE-(HEMI_BASE-Math.min(HEMI_BASE,.42+(b-1)*.3))*k;
+  playerLight.intensity=Math.min(1.8,.55*k*Math.max(1,b*.9));
+  scene.fog.near=FOG_NEAR_C+(FOG_NEAR_D+(b-1)*8-FOG_NEAR_C)*k;
+  scene.fog.far=FOG_FAR_C+(FOG_FAR_D+Math.max(0,(b-1)*80)-FOG_FAR_C)*k;
+}
 function applyDecayLerp(k){
   if(Math.abs(k-lastDecayK)<.002)return;
   lastDecayK=k;
@@ -1454,16 +1486,12 @@ function applyDecayLerp(k){
   sunSpr.material.opacity=.95*(1-k);
   lerpHex(scene.background,FOGC_CLEAN,FOGC_DARK,k);
   lerpHex(scene.fog.color,FOGC_CLEAN,FOGC_DARK,k);
-  scene.fog.near=FOG_NEAR_C+(FOG_NEAR_D-FOG_NEAR_C)*k;
-  scene.fog.far=FOG_FAR_C+(FOG_FAR_D-FOG_FAR_C)*k;
-  hemiL.intensity=HEMI_BASE-(HEMI_BASE-HEMI_DARK)*k;
   sun.intensity=SUN_BASE-(SUN_BASE-SUN_DARK)*k;
   lerpHex(sun.color,0xffd2a0,0x9aa2b0,k);
-  renderer.toneMappingExposure=1.02-(1.02-1.0*settings.bright)*k;
+  applyExposure();
   for(const c of clouds)c.visible=k<.5;
   rainPts.visible=k>.55;
   ashPts.visible=k>.45;
-  playerLight.intensity=.55*k;
   const wantDark=k>=.5;
   if(wantDark!==envDarkState){
     envDarkState=wantDark;
@@ -1781,7 +1809,7 @@ const PUPS={
 };
 const PUP_KEYS=Object.keys(PUPS);
 const streak={kills:0,uavT:0,mortars:0};
-/* ============ AUDIO ============ */
+  /* ============ AUDIO ============ */
 let AC=null,noiseBuf=null;
 function initAudio(){
   if(AC)return;
@@ -2049,7 +2077,7 @@ const TRACK_STATIC=(()=>{
     return{stop(){L.stop();}};
   }};
 })();
-/* --- TRACK 4: OVERCLOCK (combat · 140bpm acid bass) --- */
+/* --- TRACK 4: OVERCLOCK (combat/boss · 140bpm acid bass) --- */
 const TRACK_OVERCLOCK=(()=>{
   const SEQ=[0,0,12,0,3,0,10,0,0,0,12,3,5,3,10,12];
   return{start(out){
@@ -2219,7 +2247,6 @@ const NET={
 };
 const LOBBY_API=window.REDLINE_LOBBY_API||'';
 function netStatus(msg){const el=$('coopStatus');if(el)el.textContent=msg;}
-function lobbyStatus(){return LOBBY_API?'LOBBY SERVICE READY':'LOBBY SERVICE NOT CONFIGURED';}
 async function refreshLobbies(){
   const el=$('lobbyList');
   if(!LOBBY_API){el.textContent='SET REDLINE_LOBBY_API TO ENABLE PUBLIC LOBBY DISCOVERY';return;}
@@ -2385,7 +2412,7 @@ function coopCheckWipe(){
     const s=NET.players[id];
     if(s&&!s.down)return false;
   }
-  return true; // host is down and no connected client reports being up
+  return true;
 }
 function netApplyEnemySnapshot(list){
   const seen=new Set();
@@ -2397,7 +2424,8 @@ function netApplyEnemySnapshot(list){
       e={nid:s.nid,kind:s.kind,team:s.team,pos:new THREE.Vector3(s.x,0,s.z),
         h:(s.kind==='boss'?3.1:1.85)*scale,
         bodyR:(s.kind==='boss'?.85:.5)*scale,headR:(s.kind==='boss'?.36:.24)*scale,
-        hp:s.hp,maxHp:s.maxHp,dead:false,deadT:0,
+        hp:s.hp,maxHp:s.maxHp,dead:false,deadT:0,riseT:0,flinchT:0,
+        fallDir:1,fallSide:0,
         mesh:getEnemyMesh(s.kind,s.team),netVisual:true};
       e.baseScaleY=scale;
       e.zom=!!e.mesh.userData.zombie;
@@ -2422,8 +2450,11 @@ function updateEnemiesClientVisual(dt){
     if(!e.netVisual)continue;
     if(e.dead){
       e.deadT+=dt;
-      if(e.deadT<.5)e.mesh.rotation.x=-e.deadT*2.6;
-      else if(e.deadT<1.4)e.mesh.position.y=-(e.deadT-.5)*.8;
+      if(e.zom){
+        const fk=Math.min(1,e.deadT/.55),fe=1-Math.pow(1-fk,2.2);
+        e.mesh.rotation.x=e.fallDir*fe*1.5;
+        e.mesh.rotation.z=e.fallSide*.65*fe;
+      }else if(e.deadT<.5)e.mesh.rotation.x=-e.deadT*2.6;
       continue;
     }
     if(e._tx!==undefined){
@@ -3533,7 +3564,7 @@ function buildAncient(){
   const e2=e1.clone();e2.position.x=.06;g.add(e2);
   return g;
 }
-/* ---- real zombie models (melee-only, no guns anywhere) ---- */
+/* ---- real zombie models — melee-only, no guns, glowing eyes ---- */
 const ZOM_SKINS=[0x93a184,0x86957c,0x9fa287,0x7d8b74];
 const ZOM_SHIRTS=[0x413a30,0x323840,0x4d3b2b,0x3a4042];
 const ZOM_PANTS=[0x2c2a26,0x33393d,0x3d3229];
@@ -3691,6 +3722,7 @@ function spawnEnemy(kind,team){
     role:Math.random()<.28?'flanker':'assault',flankSide:Math.random()<.5?-1:1,phase:1,
     coverT:rnd(2,5),cover:null,
     buffT:0,screamT:rnd(2,5),tellT:0,beam:null,
+    flinchT:0,fallDir:1,fallSide:0,
     name:'GRUNT',
   };
   if(kind==='ancient')e.riseT=.6;
@@ -3757,10 +3789,13 @@ function damageEnemy(e,dmg,head,byPlayer,src){
   if(e.kind==='boss')dmg*=.8;
   if(byPlayer&&pu.insta>0)dmg=99999;
   e.hp-=dmg;
+  e.flinchT=.16;
   TMP_V.set(e.pos.x,e.pos.y+e.h*.6,e.pos.z);
   burst(TMP_V,e.zom?0x5a1210:0x7a1e14,4,3,.07);
   if(e.hp<=0){
     e.dead=true;e.deadT=0;
+    e.fallDir=Math.random()<.7?1:-1;
+    e.fallSide=rnd(-1,1);
     if(e.kind==='boss'){
       bossRef=null;
       gainPts(800);SFX.kill();hitmark(true);
@@ -3819,21 +3854,30 @@ function updateEnemies(dt){
     if(e.dead){
       e.deadT+=dt;
       if(e.beam)e.beam.material.opacity=0;
-      if(e.deadT<.5)e.mesh.rotation.x=-e.deadT*2.6;
-      else if(e.deadT<1.4)e.mesh.position.y=-(e.deadT-.5)*.8;
-      else{
+      if(e.zom){
+        // crumple sideways, arms thrown up, jaw slack
+        const fk=Math.min(1,e.deadT/.55),fe=1-Math.pow(1-fk,2.2);
+        e.mesh.rotation.x=e.fallDir*fe*1.5;
+        e.mesh.rotation.z=e.fallSide*.65*fe;
+        if(ud.la)ud.la.rotation.x=-2.1*fe;
+        if(ud.ra)ud.ra.rotation.x=-2.3*fe;
+        if(ud.jaw)ud.jaw.rotation.x=.55*fe;
+      }else if(e.deadT<.5)e.mesh.rotation.x=-e.deadT*2.6;
+      if(e.deadT>=.5&&e.deadT<1.4)e.mesh.position.y=-(e.deadT-.5)*.8;
+      else if(e.deadT>=1.4){
         if(e.team>=0&&isTDM())respawnBot(e);
         else{releaseEnemyMesh(e);enemies.splice(i,1);}
       }
       continue;
     }
     if(e.buffT>0)e.buffT-=dt;
-    if(e.riseT>0){
+    if(e.riseT>0){ // clawing up out of the ground
       e.riseT-=dt;
       const k=clamp(1-Math.max(0,e.riseT)/.6,0,1);
       e.mesh.scale.y=Math.max(.03,e.baseScaleY*k);
       if(e.riseT<=0)e.mesh.scale.y=e.baseScaleY;
     }
+    if(e.flinchT>0)e.flinchT=Math.max(0,e.flinchT-dt);
     let tgtObj=null,attackPlayer=false,humanTgt=null;
     if(e.kind==='boss'){
       humanTgt=NET.online?pickNearestHuman(e.pos):(!pDead?{x:player.pos.x,y:player.pos.y,z:player.pos.z,eye:player.eye,id:null}:null);
@@ -4010,9 +4054,12 @@ function updateEnemies(dt){
     }
     e.mesh.position.set(e.pos.x,e.pos.y,e.pos.z);
     if(hasTgt)e.mesh.rotation.y=Math.atan2(-dx,-dz);
-    if((melee||e.kind==='screamer')&&!e.dead)
-      e.mesh.rotation.z=Math.sin(now*1.7+e.walkT)*.04;
-    else if(!e.dead)e.mesh.rotation.z*=1-Math.min(1,6*dt);
+    if(!(ud.zombie&&e.swingT<=0&&e.riseT<=0)){
+      // zombie idle/shamble sets rotation.z itself in its block
+      if((melee||e.kind==='screamer')&&!e.dead)
+        e.mesh.rotation.z=Math.sin(now*1.7+e.walkT)*.04;
+      else if(!e.dead&&!ud.zombie)e.mesh.rotation.z*=1-Math.min(1,6*dt);
+    }
     const moving=mvx*mvx+mvz*mvz>.1||e.chState==='charging';
     if(moving){
       e.walkT+=dt*((melee||e.kind==='boss')&&(e.sprint||e.chState==='charging')?13:8);
@@ -4040,13 +4087,35 @@ function updateEnemies(dt){
         ud.ra.rotation.x=-1.15;
       }
     }
+    /* ---- zombie behavior animation: rise pose, reach, lunge, flinch ---- */
     if(ud.zombie){
-      if(ud.head)ud.head.rotation.z=(ud.headZ||0)+Math.sin(now*1.2+e.walkT)*.15;
-      if(ud.jaw)ud.jaw.rotation.x=(e.swingT>0?.55:.1)
-        +Math.max(0,Math.sin(now*6+e.walkT))*.07;
-      if(e.swingT<=0){
-        ud.la.rotation.x=-1.15+Math.sin(e.walkT*.55)*.14;
-        ud.ra.rotation.x=-1.02+Math.cos(e.walkT*.5+1.1)*.14;
+      const run=ud.zombie==='runner';
+      const gait=e.walkT*(run?1.5:1);
+      if(e.riseT>0){
+        if(ud.la)ud.la.rotation.x=-2.5;
+        if(ud.ra)ud.ra.rotation.x=-2.6;
+        if(ud.jaw)ud.jaw.rotation.x=.5;
+        if(ud.head){ud.head.rotation.z=(ud.headZ||0);ud.head.rotation.x=0;}
+      }else if(e.swingT>0){
+        // two-arm lunge + jaw snap
+        const sk=Math.max(0,e.swingT)/.3;
+        if(ud.la)ud.la.rotation.x=-.4-sk*1.6;
+        if(ud.ra)ud.ra.rotation.x=-.3-sk*1.7;
+        if(ud.jaw)ud.jaw.rotation.x=.35+sk*.45;
+        e.mesh.rotation.x=-sk*.14;
+      }else{
+        const reach=clamp(1-(dist-1.6)/3,0,1); // arms rise as it closes in
+        const pump=run?Math.sin(gait)*.8:Math.sin(gait*.5)*.14;
+        if(ud.la)ud.la.rotation.x=-1.15-reach*.55+pump;
+        if(ud.ra)ud.ra.rotation.x=-1.02-reach*.55-pump;
+        if(ud.jaw)ud.jaw.rotation.x=.1+Math.max(0,Math.sin(now*6+e.walkT))*.07
+          +reach*.12;
+        if(ud.head){
+          ud.head.rotation.z=(ud.headZ||0)+Math.sin(now*1.2+e.walkT)*.15;
+          ud.head.rotation.x=Math.sin(gait*.5+.4)*.1-(run?.25:0)+e.flinchT*2.2;
+        }
+        e.mesh.rotation.z=Math.sin(now*1.7+e.walkT)*(run?.06:.04)+e.flinchT*.5;
+        e.mesh.rotation.x*=1-Math.min(1,8*dt);
       }
     }
     if(e.kind==='marksman'&&e.beam){
@@ -5831,6 +5900,130 @@ function updateWeapon(dt){
   }else laserLine.visible=false;
 }
 
+/* ============ CUTSCENE ENGINE ============ */
+const CINE={active:false,steps:[],si:0,end:null,justEnded:0};
+function buildCineUI(){
+  if($('cineTop'))return;
+  const top=document.createElement('div');top.id='cineTop';
+  const bot=document.createElement('div');bot.id='cineBot';
+  const sub=document.createElement('div');sub.id='cineSub';
+  const ti=document.createElement('div');ti.id='cineTitle';
+  const sk=document.createElement('div');sk.id='cineSkip';
+  sk.textContent='TAP / PRESS ANY KEY TO SKIP';
+  document.body.append(top,bot,sub,ti,sk);
+  const s=document.createElement('style');s.id='cineStyle';
+  s.textContent='body.cine #pauseBtn{display:none!important}';
+  document.head.appendChild(s);
+}
+function cineStart(steps,onEnd){
+  CINE.active=true;CINE.steps=steps;CINE.si=0;CINE.end=onEnd||null;
+  document.body.classList.add('cine');
+  buildCineUI();
+  mouseDown=false;fireQueued=false;adsHeld=false;
+  touchState.fire=false;touchState.fireSlide=false;
+  if(document.pointerLockElement)document.exitPointerLock();
+  $('hud').style.opacity=0;
+}
+function cineEnd(){
+  if(!CINE.active)return;
+  CINE.active=false;
+  CINE.justEnded=performance.now();
+  document.body.classList.remove('cine');
+  const sub=$('cineSub'),ti=$('cineTitle');
+  if(sub)sub.style.display='none';
+  if(ti)ti.classList.remove('on');
+  $('hud').style.opacity='';
+  for(const k in pressed)pressed[k]=false;
+  for(const k in TK)TK[k]=false;
+  const f=CINE.end;CINE.end=null;
+  if(!isMobile()&&state==='playing')lockPointer();
+  if(f)f();
+}
+addEventListener('keydown',e=>{
+  if(!CINE.active)return;
+  e.preventDefault();e.stopPropagation();
+  cineEnd();
+},true);
+addEventListener('pointerdown',e=>{
+  if(!CINE.active)return;
+  e.stopPropagation();
+  cineEnd();
+},true);
+function cineUpdate(rdt){
+  if(!CINE.active)return;
+  const st=CINE.steps[CINE.si];
+  if(!st){cineEnd();return;}
+  if(st._t===undefined){st._t=0;st._on=false;}
+  st._t+=rdt;
+  const k=st.dur?Math.min(1,st._t/st.dur):1;
+  if(st.type==='cam'){
+    const ek=1-Math.pow(1-k,2);
+    camera.position.lerpVectors(st.from,st.to,ek);
+    if(st.look)camera.lookAt(st.look);
+  }else if(st.type==='title'){
+    if(!st._on){st._on=true;
+      const ti=$('cineTitle');
+      ti.innerHTML=st.main+(st.sub?`<small>${st.sub}</small>`:'');
+      ti.classList.add('on');
+    }
+  }else if(st.type==='line'){
+    if(!st._on){st._on=true;
+      const sub=$('cineSub');
+      sub.style.display='block';
+      sub.innerHTML=`<b>${st.who}</b><span></span>`;
+      st.el=sub.querySelector('span');
+      st.chars=-1;
+      if(st.sfx)st.sfx();
+    }
+    const want=Math.min(st.text.length,Math.floor(st._t*34));
+    if(want!==st.chars){st.chars=want;st.el.textContent=st.text.slice(0,st.chars);}
+  }else if(st.type==='fn'&&st.fn){st.fn();}
+  if(k>=1){
+    if(st.type==='title')$('cineTitle').classList.remove('on');
+    if(st.type==='line')$('cineSub').style.display='none';
+    st._t=undefined;st._on=false;st.el=null;
+    CINE.si++;
+  }
+}
+/* --- scripted scenes --- */
+function zombiesIntro(){
+  const pp=player.pos.clone(),yaw=player.yaw;
+  const fwd=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+  const side=new THREE.Vector3(-fwd.z,0,fwd.x);
+  const from=pp.clone().addScaledVector(fwd,10).addScaledVector(side,8);from.y=9;
+  const mid=pp.clone().addScaledVector(fwd,6);mid.y=3.4;
+  const to=pp.clone().addScaledVector(fwd,1.4);to.y=1.62;
+  const look0=pp.clone();look0.y=1.4;
+  cineStart([
+    {type:'fn',fn(){camera.position.copy(from);camera.lookAt(look0);}},
+    {type:'title',main:'FROSTLINE TRANSIT',sub:'NIGHT 0',dur:2.6},
+    {type:'cam',from,to:mid,look:look0,dur:3.2},
+    {type:'line',who:'DUTCH — WEST CONTROL',dur:3.6,sfx:()=>SFX.static(),
+      text:'Nightshift, you copy? Grid just went dark across the whole line.'},
+    {type:'cam',from:mid,to,look:look0,dur:2.2},
+    {type:'line',who:'DUTCH',dur:3.2,
+      text:'It is not the power, kid. The line itself is singing.'},
+    {type:'line',who:'NIGHTSHIFT',dur:2.4,sfx:()=>SFX.growl(),
+      text:'Then I will walk the rails.'},
+    {type:'title',main:'THE DEAD ARE WALKING',sub:'ROUND 01',dur:2.2},
+  ],()=>{announce('ROUND 01','HORDE ×2 EVERY ROUND');});
+}
+function bossCine(b){
+  const p=player.pos;
+  const dir=new THREE.Vector3(b.pos.x-p.x,0,b.pos.z-p.z);
+  if(dir.lengthSq()<.01)dir.set(0,0,1);
+  dir.normalize();
+  const side=new THREE.Vector3(-dir.z,0,dir.x);
+  const from=p.clone().addScaledVector(dir,5).addScaledVector(side,3);from.y=2.6;
+  const to=from.clone().addScaledVector(dir,3.2);to.y=1.8;
+  const look=b.pos.clone();look.y=b.h*.62;
+  cineStart([
+    {type:'fn',fn(){camera.position.copy(from);camera.lookAt(look);}},
+    {type:'title',main:b.name,sub:'BOSS',dur:2.2},
+    {type:'cam',from,to,look,dur:2.4},
+  ]);
+}
+
 /* ============ DIRECTOR ============ */
 let lastRoundTxt='';
 function director(dt){
@@ -5842,6 +6035,7 @@ function director(dt){
       bossPending=false;
       bossRef=spawnEnemy('boss',-1)||null;
       if(!bossRef)bossPending=true;
+      else if(!NET.online&&!CINE.active)bossCine(bossRef);
     }
     spawnT-=dt;
     const cap=Math.min(7+round+Math.floor(kills/20),16);
@@ -6342,6 +6536,8 @@ addEventListener('keydown',e=>{
     return;
   }
   if(e.code==='Escape'){
+    if(CINE.active)return; // capture handler already skipped it
+    if(performance.now()-CINE.justEnded<200)return;
     if(state==='playing')pauseGame();
     else if(state==='paused')resumeGame();
     return;
@@ -6396,7 +6592,7 @@ function lockPointer(){
   }catch(err){}
 }
 document.addEventListener('pointerlockchange',()=>{
-  if(!document.pointerLockElement&&state==='playing'&&!isMobile()&&!shopOpen)pauseGame();
+  if(!document.pointerLockElement&&state==='playing'&&!isMobile()&&!shopOpen&&!CINE.active)pauseGame();
 });
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden&&state==='playing')pauseGame();
@@ -6447,8 +6643,8 @@ function startGame(){
     if(mode==='archive'||isSoloZombies()){
       horrorMode=true;
       setDecayInstant(true);
-      announce(isSoloZombies()?'FROSTLINE TRANSIT':'ARCHIVE',
-        isSoloZombies()?'THE DEAD ARE WALKING':'DEAD FROM ROUND 1');
+      if(isSoloZombies())zombiesIntro();
+      else announce('ARCHIVE','DEAD FROM ROUND 1');
     }else{
       horrorMode=false;
       setDecayInstant(false);
@@ -6756,7 +6952,7 @@ function buildSettingsUI(){
   toggle('FPS Counter','fps');
   slider('Volume','vol',0,1,.05,v=>Math.round(v*100)+'%');
   toggle('Film FX (horror)','filmFx');
-  slider('Horror Brightness','bright',.6,1.6,.05,v=>v.toFixed(2));
+  slider('Zombie Brightness','bright',.5,2.5,.05,v=>v.toFixed(2)+'×');
   toggle('Compass','compass');
   toggle('Navigation Debug','navDebug');
   const row=document.createElement('div');row.className='srow';
@@ -6787,6 +6983,9 @@ function frame(){
     if(c.position.x>340)c.position.x=-340;
   }
   if(state==='playing'){
+    if(CINE.active){
+      cineUpdate(rdt); // world frozen during cutscenes; FX keep settling below
+    }else{
     const sdt=rdt*timeScale;
     updatePlayer(sdt,rdt);
     updateWeapon(sdt);
@@ -6818,6 +7017,7 @@ function frame(){
     }
     for(const k in pressed)pressed[k]=false;
     for(const k in TK)TK[k]=false;
+    }
   }
   updateTracers(rdt);
   updateParticles(rdt);

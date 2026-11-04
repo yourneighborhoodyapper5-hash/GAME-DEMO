@@ -1921,7 +1921,8 @@ function netStatus(msg) {
 function lobbyStatus() {
   return LOBBY_API ? 'LOBBY SERVICE READY' : 'LOBBY SERVICE NOT CONFIGURED';
 }
-
+async function refreshLobbies() {
+  const el = $("lobbyList");
   if (!el) return;
 
   if (NET.stopRooms) {

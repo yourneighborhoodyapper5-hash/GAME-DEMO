@@ -2086,6 +2086,7 @@ function netHost(){
 
   NET.peer.on('error',e=>{NET.connecting=false;netStatus('HOST ERROR · '+((e&&e.type)||'unknown'));});
 }
+
 function netJoin(peerId){
   if(NET.peer||NET.connecting||!peerId)return;
   NET.connecting=true;

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Tiki tiki REDLINE — build 1.0.2</title>
+<title>REDLINE — build 1.1(ONLINE CO-OP FIX)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -671,16 +671,18 @@ window.addEventListener('unhandledrejection',e=>showErr(String(
   (e.reason&&e.reason.message)||e.reason)));
 </script>
 
-<script>
-window.REDLINE_LOBBY_API='https://redline-lobby.yourneighborhoodyapper5.workers.dev';
-</script>
-
 <script type="module">
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import {
+  createRoom,
+  updateRoom,
+  deleteRoom,
+  watchRooms
+} from "./firebase-rooms.js";
 
 /* ============ HELPERS ============ */
 const $=id=>document.getElementById(id);
@@ -1892,57 +1894,153 @@ let vm=null,vmRecoil=0,vmSwayX=0,vmSwayY=0;
 let selMode='break',selMap=0;
 
 /* ============ ONLINE CO-OP (PeerJS, host-authoritative) ============ */
-const NET={
+const NET={ 
+  online: false,
+  isHost: false,
+  peer: null,
+  hostConn: null,
+  conns: {},
+  myId: null,
+  players: {},
+  nextNid: 1,
+  avatars: {},
+  tickAcc: 0,
+  roomCode: "",
+  wantMap: 0,
+  lobbyTimer: 0,
+  lobbyId: "",
+  connecting: false,
+  stopRooms: null
   online:false,isHost:false,peer:null,hostConn:null,conns:{},myId:null,
   players:{},nextNid:1,avatars:{},tickAcc:0,roomCode:'',wantMap:0,
   lobbyTimer:0,lobbyId:'',connecting:false,
 };
-const LOBBY_API=window.REDLINE_LOBBY_API||'';
 function netStatus(msg){const el=$('coopStatus');if(el)el.textContent=msg;}
 function lobbyStatus(){return LOBBY_API?'LOBBY SERVICE READY':'LOBBY SERVICE NOT CONFIGURED';}
-async function refreshLobbies(){
-  const el=$('lobbyList');
-  if(!LOBBY_API){el.textContent='SET REDLINE_LOBBY_API TO ENABLE PUBLIC LOBBY DISCOVERY';return;}
-  el.textContent='SEARCHING FOR OPEN LOBBIES…';
-  try{
-    const r=await fetch(LOBBY_API.replace(/\/$/,'')+'/rooms',{cache:'no-store'});
-    if(!r.ok){
-      let detail='HTTP '+r.status;
-      try{const info=await r.json();if(info.error)detail+=' · '+info.error;}catch(e){}
-      throw new Error(detail);
+async function refreshLobbies() {
+  const el = $("lobbyList");
+
+  if (!el) return;
+
+  if (NET.stopRooms) {
+    NET.stopRooms();
+    NET.stopRooms = null;
+  }
+
+  el.textContent = "SEARCHING FOR OPEN LOBBIES…";
+
+  NET.stopRooms = watchRooms(list => {
+    el.innerHTML = "";
+
+    const available = list
+      .filter(room => room.players < room.maxPlayers)
+      .sort((a, b) =>
+        Number(b.updatedAt || 0) -
+        Number(a.updatedAt || 0)
+      );
+
+    if (!available.length) {
+      el.textContent = "NO OPEN LOBBIES";
+      return;
     }
-    const rooms=await r.json();
-    el.innerHTML='';
-    if(!rooms.length){el.textContent='NO OPEN LOBBIES';return;}
-    rooms.forEach(room=>{
-      const b=document.createElement('button');
-      b.className='btnGhost';b.style.cssText='display:flex;width:100%;justify-content:space-between;padding:8px 10px;margin-bottom:5px;font-size:10px';
-      b.innerHTML=`<span>${room.name||'REDLINE LOBBY'} · ${room.map||'RANDOM'}</span><span>${room.players||1}/${room.maxPlayers||3} · JOIN</span>`;
-      b.onclick=()=>netJoin(room.peerId);
-      el.appendChild(b);
+
+    for (const room of available) {
+      const button = document.createElement("button");
+
+      button.className = "btnGhost";
+      button.style.cssText =
+        "display:flex;width:100%;justify-content:space-between;" +
+        "padding:8px 10px;margin-bottom:5px;font-size:10px";
+
+      const title = document.createElement("span");
+      title.textContent =
+        `${room.name || "REDLINE LOBBY"} · ${room.map || "RANDOM"}`;
+
+      const count = document.createElement("span");
+      count.textContent =
+        `${room.players || 1}/${room.maxPlayers || 3} · JOIN`;
+
+      button.append(title, count);
+      button.onclick = () => netJoin(room.peerId);
+
+      el.appendChild(button);
+    }
+  });
+}
+
+async function lobbyRegister() {
+  if (!NET.peer?.id) return;
+
+  NET.lobbyId = NET.peer.id;
+
+  try {
+    await createRoom({
+      peerId: NET.peer.id,
+      name: "REDLINE LOBBY",
+      mode: "coop",
+      map: MAPS[selMap]?.name || "RANDOM",
+      players: 1,
+      maxPlayers: 3
     });
-  }catch(e){el.textContent='LOBBY ERROR · '+(e.message||'TRY REFRESH');}
+
+    netStatus("LOBBY OPEN · WAITING FOR PLAYERS");
+  } catch (error) {
+    console.error(error);
+    netStatus("FIREBASE LOBBY ERROR");
+  }
 }
-async function lobbyRegister(){
-  if(!LOBBY_API||!NET.peer?.id)return;
-  NET.lobbyId=NET.peer.id;
-  try{await fetch(LOBBY_API.replace(/\/$/,'')+'/rooms',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({peerId:NET.peer.id,name:'REDLINE LOBBY',mode:selMode,map:MAPS[selMap].name,players:1,maxPlayers:3})});}catch(e){}
+
+async function lobbyHeartbeat() {
+  if (!NET.lobbyId) return;
+
+  try {
+    await updateRoom(
+      NET.lobbyId,
+      Object.keys(NET.conns).length + 1
+    );
+  } catch (error) {
+    console.warn("Lobby heartbeat failed:", error);
+  }
 }
-async function lobbyHeartbeat(){
-  if(!LOBBY_API||!NET.lobbyId)return;
-  try{await fetch(LOBBY_API.replace(/\/$/,'')+'/rooms/'+encodeURIComponent(NET.lobbyId),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({players:Object.keys(NET.conns).length+1})});}catch(e){}
+
+function lobbyStop() {
+  if (NET.lobbyTimer) {
+    clearInterval(NET.lobbyTimer);
+    NET.lobbyTimer = 0;
+  }
+
+  if (NET.lobbyId) {
+    deleteRoom(NET.lobbyId).catch(() => {});
+  }
+
+  NET.lobbyId = "";
 }
-function lobbyStop(){
-  if(NET.lobbyTimer){clearInterval(NET.lobbyTimer);NET.lobbyTimer=0;}
-  if(LOBBY_API&&NET.lobbyId)fetch(LOBBY_API.replace(/\/$/,'')+'/rooms/'+encodeURIComponent(NET.lobbyId),{method:'DELETE'}).catch(()=>{});
-  NET.lobbyId='';
-}
-function netReset(){
+function netReset() {
   lobbyStop();
-  try{if(NET.peer)NET.peer.destroy();}catch(e){}
-  for(const id in NET.avatars)netCleanupAvatar(id);
-  NET.online=false;NET.isHost=false;NET.peer=null;NET.hostConn=null;NET.connecting=false;
-  NET.conns={};NET.players={};NET.avatars={};NET.myId=null;NET.tickAcc=0;
+
+  if (NET.stopRooms) {
+    NET.stopRooms();
+    NET.stopRooms = null;
+  }
+
+  try {
+    if (NET.peer) NET.peer.destroy();
+  } catch {}
+
+  for (const id in NET.avatars) {
+    netCleanupAvatar(id);
+  }
+
+  NET.online = false;
+  NET.isHost = false;
+  NET.peer = null;
+  NET.hostConn = null;
+  NET.connecting = false;
+  NET.conns = {};
+  NET.players = {};
+  NET.avatars = {};
+  NET.myId = null;
+  NET.tickAcc = 0;
 }
 function netHost(){
   if(NET.peer||NET.connecting)return;
@@ -1962,18 +2060,33 @@ function netHost(){
   });
   NET.peer.on('connection',conn=>{
     if(Object.keys(NET.conns).length>=2){try{conn.close();}catch(e){}return;}
-    NET.conns[conn.peer]=conn;
-    conn.on('open',()=>{
-      $('coopPlayerCount').textContent=(Object.keys(NET.conns).length+1)+'/3';
-      netStatus('PLAYERS CONNECTED — HOST CAN START');
-    });
+    conn.on("open", async () => {
+  const count = Object.keys(NET.conns).length + 1;
+
+  $("coopPlayerCount").textContent = `${count}/3`;
+
+  if (NET.lobbyId) {
+    updateRoom(NET.lobbyId, count).catch(() => {});
+  }
+
+  netStatus("PLAYERS CONNECTED — HOST CAN START");
+});
     conn.on('data',d=>netOnHostMessage(conn,d));
-    conn.on('close',()=>{
-      delete NET.conns[conn.peer];delete NET.players[conn.peer];
-      netCleanupAvatar(conn.peer);
-      const cc=$('coopPlayerCount');if(cc)cc.textContent=(Object.keys(NET.conns).length+1)+'/3';
-    });
-  });
+    conn.on("close", () => {
+  delete NET.conns[conn.peer];
+  delete NET.players[conn.peer];
+
+  netCleanupAvatar(conn.peer);
+
+  const count = Object.keys(NET.conns).length + 1;
+
+  $("coopPlayerCount").textContent = `${count}/3`;
+
+  if (NET.lobbyId) {
+    updateRoom(NET.lobbyId, count).catch(() => {});
+  }
+});
+
   NET.peer.on('error',e=>{NET.connecting=false;netStatus('HOST ERROR · '+((e&&e.type)||'unknown'));});
 }
 function netJoin(peerId){
@@ -6411,3 +6524,4 @@ frame();
 </script>
 </body>
 </html>
+

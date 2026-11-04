@@ -1912,10 +1912,6 @@ const NET = {
   connecting: false,
   stopRooms: null
 };
-  online:false,isHost:false,peer:null,hostConn:null,conns:{},myId:null,
-  players:{},nextNid:1,avatars:{},tickAcc:0,roomCode:'',wantMap:0,
-  lobbyTimer:0,lobbyId:'',connecting:false,
-};
 function netStatus(msg){const el=$('coopStatus');if(el)el.textContent=msg;}
 function lobbyStatus(){return LOBBY_API?'LOBBY SERVICE READY':'LOBBY SERVICE NOT CONFIGURED';}
 async function refreshLobbies() {

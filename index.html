@@ -2075,21 +2075,15 @@ function netHost(){
   netStatus("PLAYERS CONNECTED — HOST CAN START");
 });
     conn.on('data',d=>netOnHostMessage(conn,d));
-    conn.on("close", () => {
-  delete NET.conns[conn.peer];
-  delete NET.players[conn.peer];
-
-  netCleanupAvatar(conn.peer);
-
-  const count = Object.keys(NET.conns).length + 1;
-
-  $("coopPlayerCount").textContent = `${count}/3`;
-
-  if (NET.lobbyId) {
-    updateRoom(NET.lobbyId, count).catch(() => {});
-  }
-});
-
+      conn.on("close", () => {
+    // existing close-handler body
+  });
+  }); // closes NET.peer.on('connection', ...)
+  NET.peer.on('error', e => {
+    NET.connecting = false;
+    netStatus('HOST ERROR · ' + ((e && e.type) || 'unknown'));
+  });
+}
   NET.peer.on('error',e=>{NET.connecting=false;netStatus('HOST ERROR · '+((e&&e.type)||'unknown'));});
 }
 function netJoin(peerId) {

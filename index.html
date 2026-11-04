@@ -1894,7 +1894,7 @@ let vm=null,vmRecoil=0,vmSwayX=0,vmSwayY=0;
 let selMode='break',selMap=0;
 
 /* ============ ONLINE CO-OP (PeerJS, host-authoritative) ============ */
-const NET={ 
+const NET = {
   online: false,
   isHost: false,
   peer: null,
@@ -1905,12 +1905,13 @@ const NET={
   nextNid: 1,
   avatars: {},
   tickAcc: 0,
-  roomCode: "",
+  roomCode: '',
   wantMap: 0,
   lobbyTimer: 0,
-  lobbyId: "",
+  lobbyId: '',
   connecting: false,
   stopRooms: null
+};
   online:false,isHost:false,peer:null,hostConn:null,conns:{},myId:null,
   players:{},nextNid:1,avatars:{},tickAcc:0,roomCode:'',wantMap:0,
   lobbyTimer:0,lobbyId:'',connecting:false,

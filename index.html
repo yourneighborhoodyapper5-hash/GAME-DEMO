@@ -1912,10 +1912,15 @@ const NET = {
   connecting: false,
   stopRooms: null
 };
-function netStatus(msg){const el=$('coopStatus');if(el)el.textContent=msg;}
-function lobbyStatus(){return LOBBY_API?'LOBBY SERVICE READY':'LOBBY SERVICE NOT CONFIGURED';}
-async function refreshLobbies() {
-  const el = $("lobbyList");
+
+function netStatus(msg) {
+  const el = $('coopStatus');
+  if (el) el.textContent = msg;
+}
+
+function lobbyStatus() {
+  return LOBBY_API ? 'LOBBY SERVICE READY' : 'LOBBY SERVICE NOT CONFIGURED';
+}
 
   if (!el) return;
 
@@ -2086,27 +2091,54 @@ function netHost(){
 
   NET.peer.on('error',e=>{NET.connecting=false;netStatus('HOST ERROR · '+((e&&e.type)||'unknown'));});
 }
-
-function netJoin(peerId){
-  if(NET.peer||NET.connecting||!peerId)return;
-  NET.connecting=true;
-  NET.isHost=false;NET.online=true;
+function netJoin(peerId) {
+  if (NET.peer || NET.connecting || !peerId) return;
+  NET.connecting = true;
+  NET.isHost = false;
+  NET.online = true;
   netStatus('CONNECTING…');
-  try{
-    NET.peer=new window.Peer({debug:0});
-  }catch(e){NET.connecting=false;netStatus('WEBRTC UNAVAILABLE ON THIS BROWSER');return;}
-  NET.peer.on('open',id=>{
-    NET.connecting=false;
-    NET.myId=id;
-    const conn=NET.peer.connect(peerId,{reliable:true,serialization:'json'});
-    NET.hostConn=conn;
-    const timeout=setTimeout(()=>{if(!conn.open){netStatus('LOBBY TIMED OUT · REFRESH AND TRY AGAIN');netReset();}},9000);
-    conn.on('open',()=>{clearTimeout(timeout);netStatus('CONNECTED — WAITING FOR HOST TO START');});
-    conn.on('data',d=>netOnClientMessage(d));
-    conn.on('close',()=>{netStatus('DISCONNECTED FROM HOST');netReset();});
-    conn.on('error',()=>{clearTimeout(timeout);netStatus('CONNECTION ERROR — LOBBY CLOSED');netReset();});
+
+  try {
+    NET.peer = new window.Peer({ debug: 0 });
+  } catch (e) {
+    NET.connecting = false;
+    netStatus('WEBRTC UNAVAILABLE ON THIS BROWSER');
+    return;
+  }
+
+  NET.peer.on('open', id => {
+    NET.connecting = false;
+    NET.myId = id;
+    const conn = NET.peer.connect(peerId, { reliable: true, serialization: 'json' });
+    NET.hostConn = conn;
+    const timeout = setTimeout(() => {
+      if (!conn.open) {
+        netStatus('LOBBY TIMED OUT · REFRESH AND TRY AGAIN');
+        netReset();
+      }
+    }, 9000);
+
+    conn.on('open', () => {
+      clearTimeout(timeout);
+      netStatus('CONNECTED — WAITING FOR HOST TO START');
+    });
+
+    conn.on('data', d => netOnClientMessage(d));
+    conn.on('close', () => {
+      netStatus('DISCONNECTED FROM HOST');
+      netReset();
+    });
+    conn.on('error', () => {
+      clearTimeout(timeout);
+      netStatus('CONNECTION ERROR — LOBBY CLOSED');
+      netReset();
+    });
   });
-  NET.peer.on('error',e=>{NET.connecting=false;netStatus('JOIN ERROR · '+((e&&e.type)||'LOBBY UNAVAILABLE'));});
+
+  NET.peer.on('error', e => {
+    NET.connecting = false;
+    netStatus('JOIN ERROR · ' + ((e && e.type) || 'LOBBY UNAVAILABLE'));
+  });
 }
 function netSend(conn,obj){try{if(conn&&conn.open)conn.send(obj);}catch(e){}}
 function netBroadcast(obj){for(const k in NET.conns)netSend(NET.conns[k],obj);}

@@ -27,11 +27,11 @@ const app = initializeApp({
 const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 const rooms = collection(db, "rooms");
 
-const MAX_PLAYERS = 3;
+const MAX_PLAYERS = 8; // Quick Play / Free-For-All rooms hold up to 8 (zombies co-op still passes 3)
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.trunc(Number(v)) || lo));
 
 function cleanRoom(room) {
-  const maxPlayers = clampInt(room.maxPlayers ?? MAX_PLAYERS, 1, MAX_PLAYERS);
+  const maxPlayers = clampInt(room.maxPlayers ?? 3, 1, MAX_PLAYERS);
   return {
     peerId: String(room.peerId),
     name: String(room.name || "REDLINE LOBBY").slice(0, 32),

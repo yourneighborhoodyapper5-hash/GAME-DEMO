@@ -286,6 +286,12 @@
     color:var(--red);font-weight:700;opacity:0}
   .mapCard.on{background:rgba(244,242,238,.94);color:var(--ink);border-color:var(--paper)}
   .mapCard.on .sel{opacity:1}
+  .olBtn{pointer-events:auto;cursor:pointer;border:2px solid var(--paper);background:transparent;color:var(--paper);
+    font:700 11px 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;transition:all .12s}
+  .olBtn:hover{background:var(--paper);color:var(--ink)}
+  .olBtn.on,.olBtn.go{background:var(--red);border-color:var(--red);color:#fff}
+  .olBtn.big{font-family:'Archivo Black',sans-serif;font-size:14px;padding:12px 22px}
+  #olQPick{gap:8px;flex-wrap:wrap}
   #tdmCfg{display:none;border:2px solid rgba(244,242,238,.5);
     background:rgba(14,14,20,.6);backdrop-filter:blur(6px);padding:14px 18px;
     margin-top:12px;max-width:560px}
@@ -533,7 +539,7 @@
 <div id="menu" class="ov">
   <div id="menuTop">
     <span>REDLINE <b>/</b> BUILD 1.1.1</span>
-    <span>6 MODES · 6 MAPS</span>
+    <span>10 MODES · 7 MAPS</span>
   </div>
   <div id="tag">CHOOSE HOW IT ENDS.</div>
   <h1>REDLINE<em>.</em></h1>
@@ -559,9 +565,43 @@
     <div id="coopLeaveRow" style="display:none;margin-bottom:8px"><button id="coopLeaveBtn" class="btnGhost" style="padding:6px 14px;font-size:10px">Leave Lobby</button></div>
     <div id="coopStatus" style="opacity:.75;font-size:10px;letter-spacing:.2em">NOT CONNECTED</div>
   </div>
+  <div id="olCfg" style="display:none;border:2px solid rgba(244,242,238,.5);background:rgba(14,14,20,.6);backdrop-filter:blur(6px);padding:14px 18px;margin-top:12px;max-width:560px;color:var(--paper);font-size:12px;letter-spacing:.1em">
+    <div class="pickLbl" id="olTitle" style="margin-top:0">ONLINE</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:10px;letter-spacing:.08em">CALLSIGN
+      <input id="olNameInput" type="text" maxlength="12" autocomplete="off" spellcheck="false" placeholder="PLAYER" style="width:150px;background:rgba(0,0,0,.4);border:1px solid rgba(244,242,238,.35);color:var(--paper);padding:6px 8px;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.08em">
+    </div>
+    <div id="olIdle">
+      <div id="olQPick" style="display:none;margin-bottom:10px"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <button id="olHostBtn" class="olBtn big">Host Room</button>
+        <button id="olFindBtn" class="olBtn big go">Find Match</button>
+        <button id="olRefreshBtn" class="olBtn">Refresh</button>
+      </div>
+      <div id="olList" style="display:none;border:1px solid rgba(244,242,238,.35);padding:8px;margin-bottom:10px;min-height:38px;font-size:10px;letter-spacing:.08em">NO OPEN LOBBIES</div>
+      <div id="olJoinRow" style="display:flex;gap:8px;margin-bottom:10px">
+        <input id="olCodeInput" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="ENTER 4-DIGIT ROOM CODE" autocomplete="off" spellcheck="false" maxlength="4" style="flex:1;min-width:0;background:rgba(0,0,0,.4);border:1px solid rgba(244,242,238,.35);color:var(--paper);padding:8px 10px;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.08em">
+        <button id="olJoinBtn" class="olBtn">Join Code</button>
+      </div>
+    </div>
+    <div id="olSearch" style="display:none;margin-bottom:10px">
+      <div id="olSearchTxt" style="font-weight:700;letter-spacing:.14em;margin-bottom:10px">SEARCHING…</div>
+      <button id="olCancelBtn" class="olBtn">Cancel</button>
+    </div>
+    <div id="olLobby" style="display:none">
+      <div id="olHead"></div>
+      <div id="olRoster"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+        <button id="olSwitchBtn" class="olBtn">Switch Team</button>
+        <button id="olBotsBtn" class="olBtn">Bots: ON</button>
+        <button id="olStartBtn" class="olBtn big go">Start Match</button>
+        <button id="olLeaveBtn" class="olBtn">Leave</button>
+      </div>
+    </div>
+    <div id="olStatus" style="opacity:.75;font-size:10px;letter-spacing:.2em">NOT CONNECTED</div>
+  </div>
   <div id="tdmCfg">
     <div class="pickLbl" style="margin-top:0">MATCH SETUP</div>
-    <div class="cfgRow"><label>TEAM SIZE</label>
+    <div class="cfgRow" id="cfgSizeRow"><label>TEAM SIZE</label>
       <input type="range" id="cfgSize" min="1" max="10" step="1" value="6">
       <span class="cval" id="cfgSizeV">6 v 6</span></div>
     <div class="cfgRow"><label>KILL TARGET</label>
@@ -1560,11 +1600,16 @@ const MODES=[
  {id:'tdm',name:'TEAM STRIKE',desc:'YOUR SQUAD VS THEIRS · FIRST TO THE KILL TARGET'},
  {id:'dom',name:'DOMINATION',desc:'CAPTURE A/B/C · DRAIN THEIR TICKETS · BATTLEFIELD ONLY'},
  {id:'coop',name:'ZOMBIES CO-OP',desc:'UP TO 3 PLAYERS · SHARED HORDE · REVIVE OR DIE TOGETHER'},
+ {id:'otdm',name:'TEAM STRIKE ONLINE',desc:'ROOM CODE · SWITCH TEAMS · FRIENDS VS FRIENDS OR BOTS'},
+ {id:'ffa',name:'FREE FOR ALL',desc:'ONLINE · EVERY PLAYER FOR THEMSELVES · FIRST TO THE KILL TARGET'},
+ {id:'queue',name:'QUICK PLAY',desc:'PICK A MODE · AUTO-MATCH LOBBY · NO CODE NEEDED'},
 ];
 let mode='break';
 const modeName=()=>MODES.find(m=>m.id===mode).name;
 const roundIsHorror=n=>mode==='archive'||(mode==='break'&&n>=6);
-const isTDM=()=>mode==='tdm'||mode==='dom';
+const isTDM=()=>mode==='tdm'||mode==='dom'||mode==='otdm'||mode==='ffa';
+const isFFA=()=>mode==='ffa';
+const myTeamIdx=()=>NET.pvp?NET.myTeam:0;
 const isDOM=()=>mode==='dom';
 const isSoloZombies=()=>mode==='solo';
 const tdmCfg={size:6,target:30,endless:false};
@@ -1914,12 +1959,16 @@ const NET = {
   stopRooms: null,
   watchToken: 0,
   hbBusy: false,
-  joinTimeout: 0
+  joinTimeout: 0,
+  kind: 'coop', pvp: false, ol: false, queue: false, roster: {}, maxP: 3, myTeam: 0,
+  startCd: -1, cfg: { bots: true }, stats: {}, names: {}, teams: {}, slots: {}, invuln: 0, hudT: 0, qTimer: 0
 };
 
 function netStatus(msg) {
   const el = $('coopStatus');
   if (el) el.textContent = msg;
+  const el2 = $('olStatus');
+  if (el2) el2.textContent = msg;
 }
 
 /* ---- Public lobby list (Firebase Firestore). Loaded lazily: if the CDN is blocked
@@ -1950,8 +1999,10 @@ function stopLobbyWatch() {
   if (NET.stopRooms) { try { NET.stopRooms(); } catch (e) {} NET.stopRooms = null; }
 }
 
-async function refreshLobbies() {
-  const el = $('lobbyList');
+const LEGACY_LIST = { el: 'lobbyList', filter: r => r.mode === 'coop' && r.name !== QUEUE_NAME, join: id => netJoin(id) };
+async function refreshLobbies(arg) {
+  const o = (arg && arg.el) ? arg : LEGACY_LIST;
+  const el = $(o.el);
   if (!el) return;
   stopLobbyWatch();
   const token = NET.watchToken;
@@ -1965,7 +2016,7 @@ async function refreshLobbies() {
   const render = () => {
     const now = Date.now();
     const open = rooms
-      .filter(r => r && r.peerId && r.peerId !== NET.lobbyId &&
+      .filter(r => r && r.peerId && r.peerId !== NET.lobbyId && o.filter(r) &&
                    Number(r.players) < Number(r.maxPlayers) &&
                    now - Number(r.updatedAt || 0) <= LOBBY_STALE_MS)
       .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
@@ -1978,13 +2029,13 @@ async function refreshLobbies() {
       const button = document.createElement('button');
       button.className = 'btnGhost';
       button.style.cssText = 'display:flex;width:100%;justify-content:space-between;' +
-                             'padding:8px 10px;margin-bottom:5px;font-size:10px';
+                             'padding:8px 10px;margin-bottom:5px;font-size:10px;color:var(--paper);border-color:var(--paper)';
       const title = document.createElement('span');
-      title.textContent = `${room.name || 'REDLINE LOBBY'} · ${room.map || 'RANDOM'}`;
+      title.textContent = `${cleanName(room.name) || 'REDLINE LOBBY'} · ${cleanName(room.map) || 'RANDOM'}`;
       const count = document.createElement('span');
       count.textContent = `${room.players || 1}/${room.maxPlayers || 3} · JOIN`;
       button.append(title, count);
-      button.onclick = () => netJoin(room.peerId);
+      button.onclick = () => o.join(room.peerId);
       el.appendChild(button);
     }
   };
@@ -1993,7 +2044,7 @@ async function refreshLobbies() {
     list => { rooms = list; render(); },
     () => { lastKey = null; el.textContent = 'LOBBY LIST BLOCKED · USE A ROOM CODE BELOW'; }
   );
-  const timer = setInterval(render, 3000); // drop dead rooms even when no new snapshot arrives
+  const timer = setInterval(render, 3000);
   NET.stopRooms = () => { clearInterval(timer); try { unsub(); } catch (e) {} };
 }
 
@@ -2006,11 +2057,11 @@ async function lobbyRegister() {
   if (!svc) { netStatus('LOBBY OPEN · SHARE ROOM CODE (PUBLIC LIST OFFLINE)'); return; }
   try {
     await svc.createRoom({
-      peerId: id, name: 'REDLINE LOBBY', mode: 'coop',
+      peerId: id, name: NET.queue ? QUEUE_NAME : 'REDLINE LOBBY', mode: NET.ol ? NET.kind : 'coop',
       map: (MAPS[selMap] && MAPS[selMap].name) || 'RANDOM',
-      players: Object.keys(NET.conns).length + 1, maxPlayers: 3
+      players: Object.keys(NET.conns).length + 1, maxPlayers: NET.maxP
     });
-    if (NET.peer?.id === id) netStatus('LOBBY OPEN · WAITING FOR PLAYERS');
+    if (NET.peer?.id === id) netStatus(NET.queue ? 'WAITING FOR PLAYERS…' : 'LOBBY OPEN · WAITING FOR PLAYERS');
   } catch (error) {
     console.error(error);
     netStatus('PUBLIC LIST OFFLINE · SHARE ROOM CODE');
@@ -2045,14 +2096,30 @@ function netReset() {
   NET.online = false; NET.isHost = false; NET.hostConn = null;
   NET.connecting = false; NET.conns = {}; NET.players = {};
   NET.avatars = {}; NET.myId = null; NET.tickAcc = 0; NET.roomCode = '';
+  if (NET.qTimer) { clearInterval(NET.qTimer); NET.qTimer = 0; }
+  NET.ol = false; NET.queue = false; NET.kind = 'coop'; NET.pvp = false; NET.roster = {}; NET.maxP = 3;
+  NET.myTeam = 0; NET.startCd = -1; NET.cfg = { bots: true }; NET.stats = {}; NET.names = {};
+  NET.teams = {}; NET.slots = {}; NET.invuln = 0;
 }
 
 // Leave the lobby/connection and go back to the lobby browser with a message.
 function netFail(msg) {
+  const requeue = Q.active && NET.queue && state === 'menu';
+  const failedJoin = (requeue && !NET.isHost) ? Q.joining : '';
   netReset();
   setLobbyUI('idle');
+  olIdle();
   netStatus(msg);
   if (selMode === 'coop' && state === 'menu') refreshLobbies();
+  if (selMode === 'ffa' && state === 'menu') refreshLobbies(FFA_LIST);
+  if (requeue) {
+    if (failedJoin) Q.bad.add(failedJoin);
+    if (++Q.tries <= 6) {
+      olShowSearching('LOBBY UNAVAILABLE · SEARCHING AGAIN…');
+      const k = Q.kind;
+      setTimeout(() => { if (Q.active && !NET.peer && !NET.connecting) qFind(k); }, 700);
+    } else { Q.active = false; olIdle(); netStatus('MATCHMAKING FAILED · TRY AGAIN'); }
+  }
 }
 
 function updateHostCount() {
@@ -2081,25 +2148,34 @@ function netHost(attempt) {
     if (NET.peer !== peer) return;
     NET.connecting = false; NET.roomCode = roomCode;
     const code = $('coopRoomCode'); if (code) code.textContent = roomCode;
-    setLobbyUI('hosting');
-    updateHostCount();
-    netStatus('LOBBY OPEN · WAITING FOR PLAYERS');
-    lobbyRegister();
-    NET.lobbyTimer = setInterval(lobbyHeartbeat, LOBBY_BEAT_MS);
+    if (NET.ol) {
+      olShowLobby();
+      netStatus(NET.queue ? 'WAITING FOR PLAYERS…' : 'ROOM OPEN · SHARE THE CODE');
+    } else {
+      setLobbyUI('hosting');
+      updateHostCount();
+      netStatus('LOBBY OPEN · WAITING FOR PLAYERS');
+    }
+    if (!NET.ol || NET.queue || NET.kind === 'ffa') {
+      lobbyRegister();
+      NET.lobbyTimer = setInterval(lobbyHeartbeat, LOBBY_BEAT_MS);
+    }
+    if (NET.ol) olBroadcastLobby();
+    if (NET.queue) { NET.qTimer = setInterval(olQueueTick, 1000); olMergeWatch(); }
   });
 
   peer.on('connection', conn => {
     conn.on('open', () => {
       if (NET.peer !== peer) { try { conn.close(); } catch (e) {} return; }
-      if (state === 'playing' || Object.keys(NET.conns).length >= 2) {
+      if (state === 'playing' || Object.keys(NET.conns).length >= NET.maxP - 1) {
         netSend(conn, { t: 'full' });
         setTimeout(() => { try { conn.close(); } catch (e) {} }, 400);
         return;
       }
       NET.conns[conn.peer] = conn;
-      updateHostCount();
+      if (NET.ol) olOnJoin(conn);
+      else { updateHostCount(); netStatus('PLAYER JOINED · HOST CAN START'); }
       lobbyHeartbeat();
-      netStatus('PLAYER JOINED · HOST CAN START');
     });
     conn.on('data', d => { if (NET.conns[conn.peer] === conn) netOnHostMessage(conn, d); });
     const drop = () => {
@@ -2107,7 +2183,7 @@ function netHost(attempt) {
       delete NET.conns[conn.peer];
       delete NET.players[conn.peer];
       netCleanupAvatar(conn.peer);
-      updateHostCount();
+      if (NET.ol) olOnLeave(conn.peer); else updateHostCount();
       lobbyHeartbeat();
       netStatus(state === 'playing' ? 'A PLAYER LEFT THE MATCH' : 'PLAYER LEFT · WAITING FOR PLAYERS');
     };
@@ -2157,14 +2233,20 @@ function netJoin(peerId) {
     NET.hostConn = conn;
     NET.joinTimeout = setTimeout(() => {
       if (NET.peer === peer && !conn.open) netFail('LOBBY TIMED OUT · TRY ANOTHER OR REFRESH');
-    }, 15000);
+    }, NET.queue ? 9000 : 15000);
 
     conn.on('open', () => {
       if (NET.peer !== peer) return;
       clearTimeout(NET.joinTimeout); NET.joinTimeout = 0;
       NET.connecting = false;
-      setLobbyUI('joined');
-      netStatus('CONNECTED — WAITING FOR HOST TO START');
+      if (NET.ol) {
+        netSend(conn, { t: 'hello', n: olName() });
+        olShowLobby();
+        netStatus('CONNECTED — WAITING FOR PLAYERS');
+      } else {
+        setLobbyUI('joined');
+        netStatus('CONNECTED — WAITING FOR HOST TO START');
+      }
     });
     conn.on('data', d => { if (NET.peer === peer) netOnClientMessage(d); });
     conn.on('close', () => {
@@ -2192,15 +2274,25 @@ function netSend(conn,obj){try{if(conn&&conn.open)conn.send(obj);}catch(e){}}
 function netBroadcast(obj){for(const k in NET.conns)netSend(NET.conns[k],obj);}
 function coopMyState(){
   return{x:+player.pos.x.toFixed(2),y:+player.pos.y.toFixed(2),z:+player.pos.z.toFixed(2),
-    yaw:+player.yaw.toFixed(2),hp:Math.round(player.hp),down:!!player.down};
+    yaw:+player.yaw.toFixed(2),pitch:+player.pitch.toFixed(2),hp:Math.round(player.hp),
+    down:!!player.down,dead:pDead?1:0,tm:NET.myTeam};
 }
 function netOnHostMessage(conn,d){
   if(!d||!d.t)return;
-  if(d.t==='pstate')NET.players[conn.peer]=d.s;
-  else if(d.t==='hit'){
+  if(d.t==='pstate'){
+    const s=d.s;if(!s)return;
+    if(NET.pvp&&NET.teams[conn.peer]!==undefined)s.tm=NET.teams[conn.peer];
+    NET.players[conn.peer]=s;
+  }else if(d.t==='hit'){
     if(state!=='playing')return;
     const e=enemies.find(x=>x.nid===d.nid);
-    if(e&&!e.dead)damageEnemy(e,d.dmg,d.head,true,'ALLY');
+    if(e&&!e.dead){
+      if(NET.pvp){
+        const kt=NET.teams[conn.peer]===1?1:0;
+        if(e.team===kt)return;
+        damageEnemy(e,d.dmg,d.head,true,pvpName(conn.peer),kt,conn.peer);
+      }else damageEnemy(e,d.dmg,d.head,true,'ALLY');
+    }
   }else if(d.t==='revive'){
     if(d.target==='HOST'){
       if(player.down){player.down=false;player.hp=40;updHp();SFX.perk();}
@@ -2208,6 +2300,16 @@ function netOnHostMessage(conn,d){
       const c=NET.conns[d.target];
       if(c)netSend(c,{t:'revived'});
     }
+  }else if(d.t==='hello'&&NET.ol){
+    const r=NET.roster[conn.peer];
+    if(r){r.n=cleanName(d.n)||r.n;olBroadcastLobby();}
+  }else if(d.t==='team'&&NET.ol&&NET.kind==='otdm'&&state!=='playing'){
+    const r=NET.roster[conn.peer];
+    if(r){r.t=d.tm===1?1:0;olBroadcastLobby();if(NET.queue)olQueueEval();}
+  }else if(d.t==='phit'&&NET.pvp&&state==='playing'){
+    pvpRouteHit(conn.peer,String(d.tid),+d.dmg,!!d.head);
+  }else if(d.t==='died'&&NET.pvp&&state==='playing'){
+    pvpHostKill({by:d.by?String(d.by):null,bn:d.bn,bt:+d.bt},conn.peer);
   }
 }
 function netOnClientMessage(d){
@@ -2220,19 +2322,41 @@ function netOnClientMessage(d){
       netApplyEnemySnapshot(d.enemies||[]);
       if(d.wipe)endGame(false);
     }
+  }else if(d.t==='psnap'){
+    if(state==='playing'||state==='dead'){
+      NET.players=d.pl||{};
+      if(d.ts){teamScores[0]=d.ts[0]|0;teamScores[1]=d.ts[1]|0;}
+      if(d.st)NET.stats=d.st;
+      if(state==='playing')netApplyEnemySnapshot(d.en||[]);
+    }
   }else if(d.t==='full'){
     netFail('LOBBY IS FULL OR ALREADY IN A MATCH');
+  }else if(d.t==='lobby'){
+    olApplyLobby(d);
   }else if(d.t==='start'){
-    selMode='coop';selMap=d.mapIdx;
+    Q.active=false;
+    selMode=(d.kind in OL_KINDS)?d.kind:'coop';
+    selMap=clamp(d.mapIdx|0,0,MAPS.length-1);
+    NET.kind=selMode;NET.pvp=selMode!=='coop';
+    olApplyCfg(d.cfg);
+    if(d.r)NET.roster=olCleanRoster(d.r);
     startGame();
   }else if(d.t==='revived'){
     player.down=false;player.hp=40;updHp();SFX.perk();
   }else if(d.t==='dmg'){
-    damagePlayer(d.amount,d.srcPos);
+    damagePlayer(d.amount,d.srcPos,d.by);
+  }else if(d.t==='kill'&&NET.pvp){
+    pvpApplyKill(d);
+  }else if(d.t==='kf'&&NET.pvp){
+    killfeed(escHtml(cleanName(d.k)||'?'),escHtml(cleanName(d.v)||'?'),0);
+    if(d.kid&&d.kid===NET.myId){SFX.kill();hitmark(true);gainPts(100);updMoney();}
+  }else if(d.t==='end'&&NET.pvp&&state==='playing'){
+    pvpShowEnd(d);
   }
 }
 function netHostTick(){
   if(!NET.online||!NET.isHost||state!=='playing')return;
+  if(NET.pvp){pvpHostTick();return;}
   NET.players['HOST']=coopMyState();
   const snapEnemies=[];
   for(const e of enemies){
@@ -2320,26 +2444,13 @@ function pickNearestHuman(fromPos){
   }
   return best;
 }
-function dealHumanDamage(target,dmg,srcPos){
+function dealHumanDamage(target,dmg,srcPos,by){
   if(!target)return;
-  if(!target.id){damagePlayer(dmg,srcPos);return;}
+  if(!target.id){damagePlayer(dmg,srcPos,by);return;}
   const s=NET.players[target.id];
-  if(s){s.hp=Math.max(0,Math.round(s.hp-dmg));if(s.hp<=0)s.down=true;}
+  if(s&&!NET.pvp){s.hp=Math.max(0,Math.round(s.hp-dmg));if(s.hp<=0)s.down=true;}
   const c=NET.conns[target.id];
-  if(c)netSend(c,{t:'dmg',amount:dmg,srcPos:{x:srcPos.x,y:srcPos.y,z:srcPos.z}});
-}
-function netEnsureAvatar(id){
-  if(NET.avatars[id])return NET.avatars[id];
-  const mesh=buildSoldier(2);
-  if(mesh.userData.band)mesh.userData.band.material=TEAM_BAND[1];
-  scene.add(mesh);
-  const av={mesh,x:0,y:0,z:0,yaw:0,init:false};
-  NET.avatars[id]=av;
-  return av;
-}
-function netCleanupAvatar(id){
-  const av=NET.avatars[id];
-  if(av){scene.remove(av.mesh);delete NET.avatars[id];}
+  if(c)netSend(c,{t:'dmg',amount:dmg,srcPos:{x:srcPos.x,y:srcPos.y,z:srcPos.z},by:by||null});
 }
 function ensureCoopHUD(){
   let el=$('coopList');
@@ -2354,6 +2465,7 @@ function ensureCoopHUD(){
 }
 function updateCoop(rdt){
   if(!NET.online||state!=='playing')return;
+  if(NET.pvp){updatePvp(rdt);return;}
   const el=ensureCoopHUD();
   let html='YOU '+(player.down?'<span style="color:var(--red)">DOWN</span>':Math.round(player.hp)+' HP')+'<br>';
   const nearDown=[];
@@ -2389,6 +2501,700 @@ function updateCoop(rdt){
         if(tid!=='HOST'){const c=NET.conns[tid];if(c)netSend(c,{t:'revived'});}
       }else netSend(NET.hostConn,{t:'revive',target:tid});
     }
+  }
+}
+
+/* ============ ONLINE PVP · TEAM STRIKE (ROOM CODE) · FREE FOR ALL · QUICK PLAY (QUEUE) ============
+   Same transport as co-op: PeerJS star topology, the host is the hub. Firestore only holds the
+   public list that Quick Play / Free-For-All browse. Damage is shooter-reported, victim-applied. */
+const OL_KINDS = {
+  otdm: { name: 'TEAM STRIKE' },
+  ffa:  { name: 'FREE FOR ALL' },
+  coop: { name: 'ZOMBIES CO-OP' },
+};
+const OL_MAX = 8;                 // players per PvP room
+const QUEUE_NAME = 'QUICK PLAY';  // marks a Firestore room as a matchmaking lobby
+const QUEUE_WAIT = 15;            // seconds the wait lobby holds once 2+ players are in
+const QUEUE_FULL_WAIT = 3;        // seconds once the lobby is full
+const QUEUE_SEARCH_MS = 3500;     // how long a searcher looks for an open lobby before hosting one
+const QUEUE_FRESH_MS = 45000;     // ignore lobbies whose host hasn't heartbeated recently
+const Q = { active: false, kind: 'otdm', tries: 0, token: 0, bad: new Set(), joining: '', stopSearch: null };
+let uiPaused = false;             // PvP "pause" only shows the overlay; the match keeps running
+const FFA_LIST = { el: 'olList', filter: r => r.mode === 'ffa', join: id => olJoinCode(id) };
+
+/* ---------- names ---------- */
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function cleanName(s) {
+  return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9_\- ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 12);
+}
+let myCallsign = cleanName((() => { try { return localStorage.getItem('redline_name'); } catch (e) { return ''; } })())
+  || ('PLAYER-' + (100 + ((Math.random() * 900) | 0)));
+function olName() {
+  const el = $('olNameInput');
+  return cleanName(el ? el.value : '') || myCallsign;
+}
+const olShow = (id, v) => { const el = $(id); if (el) el.style.display = v; };
+
+/* ---------- roster / config ---------- */
+function olCount() { return Object.keys(NET.roster).length; }
+function olTeamCounts() {
+  const c = [0, 0];
+  for (const id in NET.roster) c[NET.roster[id].t === 1 ? 1 : 0]++;
+  return c;
+}
+function olAutoTeam() { const c = olTeamCounts(); return c[0] <= c[1] ? 0 : 1; }
+function olCfg() { return { target: tdmCfg.target, size: tdmCfg.size, endless: tdmCfg.endless, bots: NET.cfg.bots }; }
+function olApplyCfg(c) {
+  if (!c) return;
+  tdmCfg.target = clamp(+c.target || 30, 5, 100);
+  tdmCfg.size = clamp(+c.size || 6, 1, 10);
+  tdmCfg.endless = !!c.endless;
+  NET.cfg.bots = !!c.bots;
+}
+function olCleanRoster(r) {
+  const out = {};
+  for (const id in (r || {})) {
+    const e = r[id] || {};
+    out[String(id).slice(0, 64)] = { n: cleanName(e.n) || 'PLAYER', t: e.t === 1 ? 1 : 0 };
+  }
+  return out;
+}
+function olCanStart() {
+  const n = olCount();
+  if (NET.kind === 'coop') return n >= 2 ? { ok: true } : { ok: false, why: 'WAITING FOR PLAYERS' };
+  if (NET.kind === 'ffa') return n >= 2 ? { ok: true } : { ok: false, why: 'NEED 2+ PLAYERS' };
+  const c = olTeamCounts();
+  if (NET.cfg.bots) return { ok: true };
+  if (n < 2) return { ok: false, why: 'NEED 2+ PLAYERS (OR TURN BOTS ON)' };
+  if (c[0] === 0 || c[1] === 0) return { ok: false, why: 'BOTH TEAMS NEED A PLAYER' };
+  return { ok: true };
+}
+
+/* ---------- lobby messaging ---------- */
+function olLobbyMsg() {
+  return { t: 'lobby', kind: NET.kind, r: NET.roster, mapIdx: selMap, cfg: olCfg(), q: NET.queue,
+           cd: Math.ceil(NET.startCd), max: NET.maxP, code: NET.roomCode };
+}
+function olBroadcastLobby() {
+  if (!NET.isHost || !NET.ol) return;
+  netBroadcast(olLobbyMsg());
+  olRenderLobby();
+}
+function olApplyLobby(d) { // client: host pushed a fresh lobby state
+  NET.kind = (d.kind in OL_KINDS) ? d.kind : 'coop';
+  NET.pvp = NET.kind !== 'coop';
+  NET.roster = olCleanRoster(d.r);
+  NET.queue = !!d.q;
+  NET.maxP = clamp(+d.max || 8, 2, OL_MAX);
+  NET.startCd = typeof d.cd === 'number' ? d.cd : -1;
+  NET.roomCode = String(d.code || '').replace(/\D/g, '').slice(0, 4);
+  if (typeof d.mapIdx === 'number') setSelMap(d.mapIdx);
+  olApplyCfg(d.cfg);
+  const me = NET.roster[NET.myId];
+  NET.myTeam = me ? me.t : 0;
+  olRenderLobby();
+}
+function olOnJoin(conn) { // host: a client's data channel just opened
+  NET.roster[conn.peer] = { n: 'PLAYER', t: NET.kind === 'otdm' ? olAutoTeam() : 0 };
+  netStatus('PLAYER JOINED · ' + olCount() + '/' + NET.maxP);
+  olBroadcastLobby();
+  if (NET.queue) olQueueEval();
+}
+function olOnLeave(id) { // host: a client dropped
+  delete NET.roster[id];
+  if (state !== 'playing') {
+    olBroadcastLobby();
+    if (NET.queue) olQueueEval();
+  }
+}
+function olSwitchTeam() {
+  if (NET.kind !== 'otdm' || state === 'playing') return;
+  const cur = (NET.roster[NET.myId] || { t: 0 }).t;
+  const nt = cur === 1 ? 0 : 1;
+  if (NET.isHost) {
+    if (NET.roster.HOST) NET.roster.HOST.t = nt;
+    NET.myTeam = nt;
+    olBroadcastLobby();
+    if (NET.queue) olQueueEval();
+  } else netSend(NET.hostConn, { t: 'team', tm: nt });
+}
+function olToggleBots() {
+  if (!NET.isHost || NET.queue || NET.kind !== 'otdm') return;
+  NET.cfg.bots = !NET.cfg.bots;
+  olBroadcastLobby();
+}
+function olCopyCode() {
+  const c = NET.roomCode; if (!c) return;
+  const ok = () => netStatus('ROOM CODE COPIED');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(c).then(ok, () => netStatus('SELECT THE CODE AND COPY IT MANUALLY'));
+  else netStatus('SELECT THE CODE AND COPY IT MANUALLY');
+}
+
+/* ---------- lobby UI ---------- */
+function olView(v) { // 'idle' | 'searching' | 'lobby'
+  olShow('olIdle', v === 'idle' ? 'block' : 'none');
+  olShow('olSearch', v === 'searching' ? 'block' : 'none');
+  olShow('olLobby', v === 'lobby' ? 'block' : 'none');
+}
+function olShowSearching(msg) {
+  olView('searching');
+  const el = $('olSearchTxt'); if (el) el.textContent = msg;
+}
+function olShowLobby() { olView('lobby'); olRenderLobby(); }
+function olRenderQPick() {
+  const el = $('olQPick'); if (!el) return;
+  el.textContent = '';
+  ['otdm', 'ffa', 'coop'].forEach(k => {
+    const b = document.createElement('button');
+    b.className = 'olBtn' + (Q.kind === k ? ' on' : '');
+    b.textContent = OL_KINDS[k].name;
+    b.onclick = () => { Q.kind = k; olRenderQPick(); };
+    el.appendChild(b);
+  });
+}
+function olIdle() {
+  olView('idle');
+  const k = selMode, q = (k === 'queue');
+  olShow('olQPick', q ? 'flex' : 'none');
+  olShow('olFindBtn', q ? 'inline-block' : 'none');
+  olShow('olHostBtn', q ? 'none' : 'inline-block');
+  olShow('olRefreshBtn', k === 'ffa' ? 'inline-block' : 'none');
+  olShow('olList', k === 'ffa' ? 'block' : 'none');
+  olShow('olJoinRow', q ? 'none' : 'flex');
+  const t = $('olTitle');
+  if (t) t.textContent = q ? 'QUICK PLAY · PICK A MODE · AUTO-MATCH · NO CODE'
+    : k === 'ffa' ? 'FREE FOR ALL · ONLINE · UP TO 8 PLAYERS'
+    : 'TEAM STRIKE ONLINE · ROOM CODE · SWITCH TEAMS · UP TO 8 PLAYERS';
+  olRenderQPick();
+}
+function olRenderLobby() {
+  const head = $('olHead'), ros = $('olRoster');
+  if (!head || !ros || !NET.ol) return;
+  const info = OL_KINDS[NET.kind] || OL_KINDS.coop;
+  const n = olCount();
+  const row = (txt, css) => { const d = document.createElement('div'); d.textContent = txt; if (css) d.style.cssText = css; head.appendChild(d); return d; };
+  head.textContent = '';
+  row(info.name + (NET.queue ? ' · QUICK PLAY' : ' · PRIVATE ROOM') + ' · ' + n + '/' + NET.maxP + ' PLAYERS',
+    'font-weight:700;letter-spacing:.14em;margin-bottom:6px');
+  if (!NET.queue && NET.roomCode) {
+    const d = row('ROOM CODE ', 'font-size:10px;letter-spacing:.08em;margin-bottom:6px');
+    const b = document.createElement('b');
+    b.textContent = NET.roomCode;
+    b.style.cssText = 'user-select:all;font-size:20px;letter-spacing:.3em;margin:0 8px 0 4px';
+    d.appendChild(b);
+    if (NET.isHost) {
+      const cp = document.createElement('button');
+      cp.className = 'olBtn'; cp.textContent = 'Copy'; cp.style.cssText = 'padding:4px 10px;font-size:9px';
+      cp.onclick = olCopyCode; d.appendChild(cp);
+    }
+  }
+  let note;
+  if (NET.queue) {
+    if (NET.startCd >= 0) note = 'MATCH STARTS IN ' + Math.max(0, Math.ceil(NET.startCd));
+    else if (n < 2) note = 'WAITING FOR OTHER PLAYERS…';
+    else note = (NET.isHost ? (olCanStart().why || '') : '') || 'WAITING…';
+  } else if (NET.isHost) {
+    const v = olCanStart();
+    note = v.ok ? 'READY · PRESS START MATCH' : v.why;
+  } else note = 'WAITING FOR HOST TO START';
+  row(note, 'font-size:10px;letter-spacing:.16em;color:var(--red);font-weight:700');
+  const botTxt = (NET.kind === 'otdm' && NET.cfg.bots) ? ' · BOTS FILL TO ' + tdmCfg.size + 'v' + tdmCfg.size : '';
+  row('MAP ' + ((MAPS[selMap] && MAPS[selMap].name) || '?') +
+    (NET.kind === 'coop' ? '' : ' · TARGET ' + (tdmCfg.endless ? '∞' : tdmCfg.target) + botTxt),
+    'font-size:9px;letter-spacing:.12em;opacity:.7;margin-top:4px');
+
+  ros.textContent = '';
+  const ids = Object.keys(NET.roster).sort((a, b) => a === 'HOST' ? -1 : b === 'HOST' ? 1 : 0);
+  const entry = id => {
+    const e = NET.roster[id], d = document.createElement('div');
+    d.textContent = e.n + (id === NET.myId ? ' (YOU)' : '') + (id === 'HOST' ? ' ★' : '');
+    d.style.cssText = 'padding:3px 0;font-weight:' + (id === NET.myId ? '700' : '400');
+    return d;
+  };
+  if (NET.kind === 'otdm') {
+    ros.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0';
+    [0, 1].forEach(t => {
+      const col = document.createElement('div');
+      const color = t ? '#4a8cff' : '#ff5040';
+      col.style.cssText = 'border:1px solid ' + color + ';padding:8px 10px;min-height:54px;font-size:11px;letter-spacing:.08em';
+      const mine = ids.filter(i => NET.roster[i].t === t);
+      const h = document.createElement('div');
+      h.textContent = (t ? 'BLUE' : 'RED') + ' · ' + mine.length;
+      h.style.cssText = 'font-weight:700;letter-spacing:.3em;font-size:10px;margin-bottom:4px;color:' + color;
+      col.appendChild(h);
+      mine.forEach(i => col.appendChild(entry(i)));
+      ros.appendChild(col);
+    });
+  } else {
+    ros.style.cssText = 'display:block;border:1px solid rgba(244,242,238,.35);padding:8px 10px;margin:10px 0;font-size:11px;letter-spacing:.08em';
+    ids.forEach(i => ros.appendChild(entry(i)));
+  }
+
+  olShow('olSwitchBtn', NET.kind === 'otdm' ? 'inline-block' : 'none');
+  olShow('olBotsBtn', (NET.isHost && !NET.queue && NET.kind === 'otdm') ? 'inline-block' : 'none');
+  const bb = $('olBotsBtn'); if (bb) bb.textContent = 'Bots: ' + (NET.cfg.bots ? 'ON' : 'OFF');
+  olShow('olStartBtn', (NET.isHost && !NET.queue) ? 'inline-block' : 'none');
+  const sb = $('olStartBtn'); if (sb) sb.style.opacity = (NET.isHost && olCanStart().ok) ? '1' : '.45';
+  const lb = $('olLeaveBtn'); if (lb) lb.textContent = NET.queue ? 'Cancel' : 'Leave';
+}
+
+/* ---------- hosting / joining ---------- */
+function olHostPrivate() {
+  const kind = selMode;
+  if (kind !== 'otdm' && kind !== 'ffa') return;
+  if (NET.peer || NET.connecting) return;
+  Q.active = false;
+  NET.ol = true; NET.kind = kind; NET.pvp = true; NET.queue = false;
+  NET.maxP = OL_MAX; NET.cfg.bots = (kind === 'otdm'); NET.startCd = -1;
+  NET.roster = { HOST: { n: olName(), t: 0 } };
+  NET.myTeam = 0;
+  netHost(0);
+  if (!NET.connecting && !NET.peer) { NET.ol = false; NET.pvp = false; NET.kind = 'coop'; NET.roster = {}; }
+}
+function olJoinCode(codeOrId) {
+  if (NET.peer || NET.connecting) return;
+  Q.active = false;
+  NET.ol = true; NET.queue = false; NET.pvp = true; NET.kind = (selMode === 'ffa') ? 'ffa' : 'otdm';
+  netJoin(codeOrId);
+  if (!NET.connecting) { NET.ol = false; NET.pvp = false; NET.kind = 'coop'; }
+}
+function olLeave() {
+  Q.active = false; Q.token++;
+  if (Q.stopSearch) { Q.stopSearch(); Q.stopSearch = null; }
+  netReset();
+  olIdle();
+  netStatus('NOT CONNECTED');
+  if (selMode === 'ffa') refreshLobbies(FFA_LIST);
+}
+function olOnModePick(id, prev) { // menu card clicked
+  const onl = (id === 'otdm' || id === 'ffa' || id === 'queue');
+  if (prev !== id && (NET.online && NET.ol || Q.active)) olLeave();
+  $('tdmCfg').style.display = (id === 'tdm' || id === 'dom' || id === 'otdm' || id === 'ffa') ? 'block' : 'none';
+  $('cfgSizeRow').style.display = (id === 'ffa') ? 'none' : '';
+  $('coopCfg').style.display = (id === 'coop') ? 'block' : 'none';
+  $('olCfg').style.display = onl ? 'block' : 'none';
+  $('startBtn').style.display = (id === 'coop' || onl) ? 'none' : '';
+  if (onl && !NET.online && !Q.active) olIdle();
+  if (id === 'coop') refreshLobbies();
+  else if (id === 'ffa') { if (!NET.online) refreshLobbies(FFA_LIST); }
+  else if (!NET.online) stopLobbyWatch();
+}
+function setSelMap(i) {
+  selMap = clamp(i | 0, 0, MAPS.length - 1);
+  const kids = $('mapRow').children;
+  for (let j = 0; j < kids.length; j++) kids[j].classList.toggle('on', j === selMap);
+  lbRender();
+}
+
+/* ---------- start / rematch ---------- */
+function olStartMatch(rematch) {
+  if (!NET.isHost || !NET.ol) return;
+  if (!rematch && state === 'playing') return;
+  const v = olCanStart();
+  if (!v.ok) { netStatus(v.why); SFX.deny(); return; }
+  if (NET.queue) { // matchmade games scale their kill target to the lobby size
+    const n = olCount();
+    tdmCfg.endless = false;
+    tdmCfg.target = NET.kind === 'ffa' ? clamp(8 + 3 * n, 10, 30) : clamp(8 + 6 * n, 16, 50);
+  }
+  Q.active = false;
+  selMode = NET.kind;
+  netBroadcast({ t: 'start', kind: NET.kind, mapIdx: selMap, cfg: olCfg(), r: NET.roster });
+  lobbyStop(); // match started: take the lobby off the public list
+  startGame();
+}
+
+/* ---------- QUICK PLAY matchmaking (no code) ---------- */
+function pickQueueRoom(list, kind) {
+  const now = Date.now();
+  const c = (list || []).filter(r => r && r.peerId && r.name === QUEUE_NAME && r.mode === kind &&
+    Number(r.players) < Number(r.maxPlayers) && now - Number(r.updatedAt || 0) <= QUEUE_FRESH_MS &&
+    !Q.bad.has(r.peerId) && r.peerId !== NET.lobbyId);
+  c.sort((a, b) => Number(b.players) - Number(a.players) || (a.peerId < b.peerId ? -1 : 1));
+  return c[0] || null;
+}
+async function qFind(kind) {
+  if (NET.peer || NET.connecting) return;
+  Q.kind = kind;
+  const token = ++Q.token;
+  olShowSearching('SEARCHING FOR A ' + OL_KINDS[kind].name + ' MATCH…');
+  netStatus('SEARCHING…');
+  const svc = await loadLobbyService();
+  if (token !== Q.token || !Q.active) return;
+  if (!svc) {
+    Q.active = false; olIdle();
+    netStatus('MATCHMAKING OFFLINE · USE A PRIVATE ROOM CODE');
+    return;
+  }
+  let finished = false, unsub = null, tm = 0;
+  const finish = room => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(tm);
+    try { if (unsub) unsub(); } catch (e) {}
+    Q.stopSearch = null;
+    if (token !== Q.token || !Q.active) return;
+    if (room === 'err') { Q.active = false; olIdle(); netStatus('MATCHMAKING BLOCKED · USE A PRIVATE ROOM CODE'); return; }
+    if (room) qJoin(room); else qHost();
+  };
+  Q.stopSearch = () => { finished = true; clearTimeout(tm); try { if (unsub) unsub(); } catch (e) {} };
+  unsub = svc.watchRooms(list => { const r = pickQueueRoom(list, kind); if (r) finish(r); }, () => finish('err'));
+  if (finished) { try { unsub(); } catch (e) {} }
+  tm = setTimeout(() => finish(null), QUEUE_SEARCH_MS);
+}
+function qJoin(room) {
+  NET.ol = true; NET.kind = room.mode; NET.pvp = room.mode !== 'coop'; NET.queue = true;
+  Q.joining = room.peerId;
+  olShowSearching('FOUND A LOBBY · JOINING…');
+  netStatus('JOINING LOBBY…');
+  netJoin(room.peerId);
+}
+function qRandomMap(kind) {
+  const ok = [];
+  MAPS.forEach((m, i) => { if (kind === 'coop' || m.id !== 'frostline') ok.push(i); });
+  return ok[(Math.random() * ok.length) | 0];
+}
+function qHost() {
+  const kind = Q.kind;
+  NET.ol = true; NET.kind = kind; NET.pvp = kind !== 'coop'; NET.queue = true;
+  NET.maxP = kind === 'coop' ? 3 : OL_MAX; NET.cfg.bots = false; NET.startCd = -1;
+  NET.roster = { HOST: { n: olName(), t: 0 } };
+  NET.myTeam = 0;
+  Q.joining = '';
+  setSelMap(qRandomMap(kind));
+  olShowSearching('NO OPEN LOBBY · CREATING ONE…');
+  netStatus('CREATING LOBBY…');
+  netHost(0);
+}
+function qMigrate(room) { // two searchers hosted at once: the higher id folds into the lower one
+  const kind = NET.kind;
+  netReset();
+  Q.kind = kind;
+  olShowSearching('MERGING INTO A LARGER LOBBY…');
+  qJoin(room);
+}
+async function olMergeWatch() {
+  const svc = await loadLobbyService();
+  if (!svc || !NET.isHost || !NET.queue || !NET.peer) return;
+  stopLobbyWatch();
+  const token = NET.watchToken;
+  const unsub = svc.watchRooms(list => {
+    if (token !== NET.watchToken || !NET.isHost || !NET.queue || state !== 'menu') return;
+    if (Object.keys(NET.conns).length > 0) return; // somebody already joined me, so I stay host
+    const mine = NET.lobbyId || (NET.peer && NET.peer.id);
+    if (!mine) return;
+    const now = Date.now();
+    const better = (list || []).filter(r => r && r.peerId && r.name === QUEUE_NAME && r.mode === NET.kind &&
+      r.peerId < mine && Number(r.players) < Number(r.maxPlayers) &&
+      now - Number(r.updatedAt || 0) <= QUEUE_FRESH_MS && !Q.bad.has(r.peerId))
+      .sort((a, b) => (a.peerId < b.peerId ? -1 : 1));
+    if (better.length) qMigrate(better[0]);
+  }, () => {});
+  NET.stopRooms = () => { try { unsub(); } catch (e) {} };
+}
+function olQueueEval() { // host of a queue lobby: should the countdown be running?
+  if (!NET.isHost || !NET.queue || state === 'playing') return;
+  const v = olCanStart();
+  if (!v.ok) { NET.startCd = -1; olBroadcastLobby(); return; }
+  const want = olCount() >= NET.maxP ? QUEUE_FULL_WAIT : QUEUE_WAIT;
+  if (NET.startCd < 0 || NET.startCd > want) NET.startCd = want;
+  olBroadcastLobby();
+}
+function olQueueTick() { // 1 Hz on the queue host
+  if (!NET.isHost || !NET.queue || state === 'playing' || !NET.peer) return;
+  if (NET.startCd >= 0) {
+    NET.startCd -= 1;
+    if (NET.startCd <= 0) { olStartMatch(false); return; }
+    olBroadcastLobby();
+  }
+}
+
+/* ============ PVP MATCH RUNTIME ============ */
+const FFA_COL = [0xff5a36, 0x3aa0ff, 0x45d16b, 0xffc233, 0xb06cff, 0xff6fb5, 0x2fd6d0, 0xe8e8e8];
+const bandMats = {};
+function bandMat(hex) {
+  if (!bandMats[hex]) bandMats[hex] = new THREE.MeshStandardMaterial({ color: hex, roughness: .7, flatShading: true });
+  return bandMats[hex];
+}
+const pvpName = id => NET.names[id] || (NET.roster[id] && NET.roster[id].n) || 'PLAYER';
+function pvpTeamOf(id) {
+  if (isFFA()) return 100 + (NET.slots[id] || 0);
+  return NET.teams[id] === 1 ? 1 : 0;
+}
+function pvpColorHex(id) {
+  if (isFFA()) return FFA_COL[(NET.slots[id] || 0) % FFA_COL.length];
+  return pvpTeamOf(id) === 1 ? 0x2266cc : 0xd42a1a;
+}
+const pvpHex = n => '#' + n.toString(16).padStart(6, '0');
+
+function pvpBeginMatch() {
+  const ids = Object.keys(NET.roster).sort();
+  NET.slots = {}; NET.teams = {}; NET.names = {}; NET.stats = {};
+  ids.forEach((id, i) => {
+    NET.slots[id] = i;
+    NET.teams[id] = NET.roster[id].t === 1 ? 1 : 0;
+    NET.names[id] = NET.roster[id].n;
+    NET.stats[id] = { k: 0, d: 0 };
+  });
+  NET.myTeam = isFFA() ? 99 : (NET.teams[NET.myId] || 0);
+  NET.invuln = 2.5; NET.hudT = 0; NET.players = {};
+  pvpPlaceSpawn(true);
+  if (NET.isHost && NET.kind === 'otdm' && NET.cfg.bots) pvpSpawnBots();
+}
+function teamSpawnPoint(team) {
+  const sgn = team === 0 ? 1 : -1;
+  let x = 0, z = 0, g = 0;
+  do {
+    const j = g ? 8 : 3;
+    x = map.spawn[0] * sgn + rnd(-j, j);
+    z = map.spawn[1] * sgn + rnd(-j, j);
+    g++;
+  } while (pointBlocked(x, z, 1) && g < 25);
+  return { x, z };
+}
+function ffaSpawnPoint(initial) {
+  const usable = s => !lockedZones.some(z => s.x > z[0] && s.x < z[2] && s.z > z[1] && s.z < z[3]) &&
+    NAV.dist[navIdx(s.x, s.z)] < 65000 && !pointBlocked(s.x, s.z, 1.2);
+  const pts = spawnPts.filter(usable);
+  if (!pts.length) return { x: map.spawn[0], z: map.spawn[1] };
+  if (initial) { // spread the opening spawns around the map by roster slot
+    const ids = Object.keys(NET.slots).sort((a, b) => NET.slots[a] - NET.slots[b]);
+    const i = Math.max(0, ids.indexOf(NET.myId));
+    return pts[Math.floor(((i + .5) / Math.max(1, ids.length)) * pts.length) % pts.length];
+  }
+  const others = [];
+  for (const id in NET.avatars) { const st = NET.players[id]; if (st && !st.dead) others.push(NET.avatars[id]); }
+  let best = pts[(Math.random() * pts.length) | 0], bd = -1;
+  for (let i = 0; i < 24; i++) {
+    const c = pts[(Math.random() * pts.length) | 0];
+    let md = others.length ? 1e9 : Math.random();
+    for (const a of others) md = Math.min(md, Math.hypot(a.x - c.x, a.z - c.z));
+    if (md > bd) { bd = md; best = c; }
+  }
+  return best;
+}
+function pvpPlaceSpawn(initial) {
+  const p = isFFA() ? ffaSpawnPoint(initial) : teamSpawnPoint(NET.myTeam);
+  player.pos.set(p.x, 0, p.z);
+  player.vel.set(0, 0, 0);
+  player.yaw = Math.atan2(p.x, p.z); // face the middle of the map
+  player.pitch = 0;
+}
+function pvpSpawnBots() { // private Team Strike with BOTS ON: fill each side up to the team size
+  const c = [0, 0];
+  for (const id in NET.teams) c[NET.teams[id]]++;
+  const counts = [Math.max(0, tdmCfg.size - c[0]), Math.max(0, tdmCfg.size - c[1])];
+  for (const team of [0, 1]) {
+    for (let i = 0; i < counts[team]; i++) {
+      const e = spawnEnemy('soldier', team);
+      if (!e) continue;
+      const p = teamSpawnPoint(team);
+      e.pos.set(p.x, 0, p.z);
+      e.mesh.position.set(p.x, 0, p.z);
+    }
+  }
+}
+
+/* ---- damage routing: shooter reports, host forwards, victim applies ---- */
+function pvpHostile(sid, tid) { return isFFA() ? true : pvpTeamOf(sid) !== pvpTeamOf(tid); }
+function pvpSendHit(tid, dmg, head) {
+  const av = NET.avatars[tid];
+  if (av) { TMP_V.set(av.x, av.y + 1.1, av.z); burst(TMP_V, 0x7a1e14, 4, 3, .07); }
+  if (NET.isHost) pvpRouteHit('HOST', tid, dmg, head);
+  else netSend(NET.hostConn, { t: 'phit', tid, dmg: Math.round(dmg * 10) / 10, head: head ? 1 : 0 });
+}
+function pvpRouteHit(sid, tid, dmg, head) { // host only
+  if (!(dmg > 0) || sid === tid) return;
+  dmg = Math.min(dmg, 300);
+  if (NET.teams[sid] === undefined || NET.teams[tid] === undefined) return;
+  if (!pvpHostile(sid, tid)) return;
+  const ss = sid === 'HOST' ? { x: player.pos.x, y: player.pos.y, z: player.pos.z, dead: pDead } : NET.players[sid];
+  if (!ss || ss.dead) return;
+  const ts = tid === 'HOST' ? { dead: pDead } : NET.players[tid];
+  if (!ts || ts.dead) return;
+  const by = { id: sid, n: pvpName(sid), t: pvpTeamOf(sid) };
+  const srcPos = { x: ss.x || 0, y: ss.y || 0, z: ss.z || 0 };
+  if (tid === 'HOST') damagePlayer(dmg, srcPos, by);
+  else netSend(NET.conns[tid], { t: 'dmg', amount: dmg, srcPos, by });
+}
+function pvpDie(by) { // my hp hit zero in a PvP match
+  player.hp = 0; updHp();
+  pDead = true; pDeadT = 3.5;
+  shakeT = Math.max(shakeT, .8);
+  resetStreak();
+  const rep = { by: by && by.id ? String(by.id).slice(0, 64) : null, bn: by ? cleanName(by.n) : '', bt: by && typeof by.t === 'number' ? by.t : -1 };
+  if (NET.isHost) pvpHostKill(rep, 'HOST');
+  else netSend(NET.hostConn, { t: 'died', by: rep.by, bn: rep.bn, bt: rep.bt });
+}
+function pvpHostKill(rep, victimId) { // host: score a death
+  if (NET.stats[victimId] === undefined) return;
+  NET.stats[victimId].d++;
+  const ps = NET.players[victimId]; if (ps) ps.dead = 1;
+  const vn = pvpName(victimId);
+  let kn = vn, kid = null, kt = -1, bot = false;
+  if (rep.by && rep.by !== victimId && rep.by !== 'BOT' && NET.stats[rep.by]) {
+    kid = rep.by; kn = pvpName(kid); kt = pvpTeamOf(kid); NET.stats[kid].k++;
+  } else if (rep.by === 'BOT') { bot = true; kn = cleanName(rep.bn) || 'BOT'; kt = rep.bt; }
+  if (!isFFA() && (kid || bot) && (kt === 0 || kt === 1) && kt !== pvpTeamOf(victimId)) teamScores[kt]++;
+  const msg = { t: 'kill', k: kn, v: vn, kid, vid: victimId };
+  netBroadcast(msg);
+  pvpApplyKill(msg);
+  pvpCheckWin();
+}
+function pvpCreditKill(id) { // host: a human killed a bot
+  if (NET.stats[id]) NET.stats[id].k++;
+}
+function pvpApplyKill(d) {
+  killfeed(escHtml(cleanName(d.k) || '?'), escHtml(cleanName(d.v) || '?'), 0);
+  if (d.kid && d.kid === NET.myId) { SFX.kill(); hitmark(true); gainPts(100); updMoney(); }
+}
+function pvpCheckWin() {
+  if (!NET.pvp || !NET.isHost || state !== 'playing' || tdmCfg.endless) return;
+  if (isFFA()) {
+    for (const id in NET.stats) if (NET.stats[id].k >= tdmCfg.target) { pvpEnd(id); return; }
+  } else if (teamScores[0] >= tdmCfg.target) pvpEnd(0);
+  else if (teamScores[1] >= tdmCfg.target) pvpEnd(1);
+}
+function pvpEnd(win) {
+  if (state !== 'playing') return;
+  const p = { t: 'end', win, ts: [teamScores[0], teamScores[1]], st: NET.stats, nm: NET.names, tm: NET.teams };
+  netBroadcast(p);
+  pvpShowEnd(p);
+}
+function pvpStandings(st, nm) {
+  return Object.keys(st || {}).map(id => ({ id, n: cleanName((nm || {})[id]) || 'PLAYER', k: (st[id] && st[id].k) | 0, d: (st[id] && st[id].d) | 0 }))
+    .sort((a, b) => b.k - a.k || a.d - b.d);
+}
+function pvpShowEnd(p) {
+  state = 'dead'; uiPaused = false;
+  mouseDown = false; fireQueued = false; adsHeld = false;
+  if (document.pointerLockElement) document.exitPointerLock();
+  $('pauseOv').style.display = 'none';
+  if (p.st) NET.stats = p.st;
+  if (p.ts) { teamScores[0] = p.ts[0]; teamScores[1] = p.ts[1]; }
+  const rows = pvpStandings(p.st, p.nm);
+  let win, title, score;
+  if (isFFA()) {
+    const pos = rows.findIndex(r => r.id === NET.myId) + 1;
+    win = p.win === NET.myId;
+    const ord = ['', '1ST', '2ND', '3RD'][pos] || (pos + 'TH');
+    title = win ? 'VICTORY.' : 'PLACED ' + ord;
+    const w = rows.find(r => r.id === p.win);
+    score = (w ? w.n : '?') + ' WINS · ' + (w ? w.k : 0) + ' KILLS';
+  } else {
+    win = p.win === NET.myTeam;
+    title = win ? 'VICTORY.' : 'DEFEAT.';
+    score = 'RED ' + teamScores[0] + ' — ' + teamScores[1] + ' BLU';
+  }
+  $('deathH2').textContent = title;
+  $('deathH2').classList.toggle('win', !!win);
+  $('finalScore').textContent = score;
+  $('newBest').style.display = 'none';
+  $('dstats').innerHTML = rows.slice(0, 8).map((r, i) =>
+    `<div><b>${String(i + 1).padStart(2, '0')}</b> ${escHtml(r.n)}${r.id === NET.myId ? ' (YOU)' : ''} — ${r.k} K / ${r.d} D</div>`).join('');
+  $('retryBtn').textContent = NET.isHost ? 'Run it back' : 'Waiting for host…';
+  $('deathOv').style.display = 'flex';
+  document.body.classList.remove('playing');
+  $('hud').classList.remove('on');
+}
+function pvpFfaLine() {
+  const rows = pvpStandings(NET.stats, NET.names);
+  const me = NET.stats[NET.myId] ? NET.stats[NET.myId].k : 0;
+  const top = rows[0];
+  return `YOU ${me}` + (top ? ` · TOP ${top.n} ${top.k}` : '') + (tdmCfg.endless ? '' : ' · FIRST TO ' + tdmCfg.target);
+}
+
+/* ---- host world snapshot ---- */
+function pvpHostTick() {
+  NET.players['HOST'] = coopMyState();
+  const en = [];
+  for (const e of enemies) {
+    if (e.riseT > 0) continue;
+    en.push({ nid: e.nid, kind: e.kind, team: e.team, x: +e.pos.x.toFixed(2), z: +e.pos.z.toFixed(2),
+      ry: +e.mesh.rotation.y.toFixed(2), hp: Math.max(0, Math.round(e.hp)), maxHp: Math.round(e.maxHp), dead: !!e.dead });
+  }
+  netBroadcast({ t: 'psnap', pl: NET.players, ts: [teamScores[0], teamScores[1]], st: NET.stats, en });
+}
+
+/* ---- remote players ---- */
+function pvpMakeTag(text, hex) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const g = cv.getContext('2d');
+  g.font = '700 30px "IBM Plex Mono",monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(text, 128, 32);
+  g.fillStyle = pvpHex(hex); g.fillText(text, 128, 32);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, fog: false }));
+  spr.scale.set(1.6, .4, 1); spr.position.set(0, 2.25, 0);
+  return spr;
+}
+function netEnsureAvatar(id) {
+  if (NET.avatars[id]) return NET.avatars[id];
+  const mesh = buildSoldier(2);
+  const av = { mesh, x: 0, y: 0, z: 0, yaw: 0, init: false, walkT: 0, px: 0, pz: 0, dead: false };
+  if (NET.pvp) {
+    const hex = pvpColorHex(id);
+    if (mesh.userData.band) mesh.userData.band.material = bandMat(hex);
+    const helm = mesh.children[4];                 // helmet sphere: tint it so teams read at a glance
+    if (helm && helm.isMesh) helm.material = bandMat(hex);
+    av.tag = pvpMakeTag(pvpName(id), hex);
+    mesh.add(av.tag);
+    av.proxy = { isAv: true, pid: id, kind: 'human', pos: new THREE.Vector3(), h: 1.85, headR: .26, bodyR: .46,
+      hp: 1, dead: false, team: pvpTeamOf(id), mesh };
+  } else if (mesh.userData.band) mesh.userData.band.material = TEAM_BAND[1];
+  scene.add(mesh);
+  NET.avatars[id] = av;
+  return av;
+}
+function netCleanupAvatar(id) {
+  const av = NET.avatars[id];
+  if (!av) return;
+  scene.remove(av.mesh);
+  if (av.tag) { if (av.tag.material.map) av.tag.material.map.dispose(); av.tag.material.dispose(); }
+  delete NET.avatars[id];
+}
+function pvpTargets() { // everything a bullet or blast can hit in a PvP match
+  const a = enemies.slice();
+  for (const id in NET.avatars) { const p = NET.avatars[id].proxy; if (p && !p.dead) a.push(p); }
+  return a;
+}
+function updatePvp(rdt) {
+  if (NET.invuln > 0) NET.invuln -= rdt;
+  for (const id in NET.players) {
+    if (id === NET.myId) continue;
+    const s = NET.players[id]; if (!s) continue;
+    const av = netEnsureAvatar(id);
+    const k = Math.min(1, 12 * rdt);
+    const wasDead = av.dead;
+    av.dead = !!s.dead;
+    if (!av.init || (wasDead && !av.dead)) { av.x = s.x; av.y = s.y; av.z = s.z; av.yaw = s.yaw; av.px = s.x; av.pz = s.z; av.init = true; }
+    av.x += (s.x - av.x) * k; av.y += (s.y - av.y) * k; av.z += (s.z - av.z) * k;
+    av.yaw += normAng(s.yaw - av.yaw) * k;
+    const ud = av.mesh.userData;
+    const sp = Math.hypot(av.x - av.px, av.z - av.pz) / Math.max(rdt, .001);
+    av.px = av.x; av.pz = av.z;
+    if (sp > .6 && !av.dead) {
+      av.walkT += rdt * Math.min(sp, 9) * 1.6;
+      const sw = Math.sin(av.walkT);
+      ud.ll.rotation.x = sw * .6; ud.rl.rotation.x = -sw * .6;
+    } else { ud.ll.rotation.x *= .8; ud.rl.rotation.x *= .8; }
+    av.mesh.position.set(av.x, av.y, av.z);
+    av.mesh.rotation.set(av.dead ? -1.35 : 0, av.yaw, 0);
+    if (av.tag) av.tag.visible = !av.dead;
+    const p = av.proxy;
+    if (p) { p.pos.set(av.x, av.y, av.z); p.dead = av.dead; p.hp = av.dead ? 0 : 1; p.team = pvpTeamOf(id); }
+  }
+  for (const id in NET.avatars) if (id !== NET.myId && !NET.players[id]) netCleanupAvatar(id);
+
+  NET.hudT -= rdt;
+  if (NET.hudT <= 0) {
+    NET.hudT = .25;
+    const el = ensureCoopHUD();
+    const rows = pvpStandings(NET.stats, NET.names).slice(0, 6);
+    el.innerHTML = rows.map(r => {
+      const col = pvpHex(pvpColorHex(r.id));
+      const alive = r.id === NET.myId ? !pDead : !(NET.players[r.id] && NET.players[r.id].dead);
+      return `<div style="opacity:${alive ? 1 : .45}"><span style="color:${col}">■</span> ${escHtml(r.n)}${r.id === NET.myId ? ' ◂' : ''} ${r.k}/${r.d}</div>`;
+    }).join('');
   }
 }
 
@@ -3037,6 +3843,7 @@ function tryFire(){
   RAY_U.crossVectors(RAY_R,RAY_D).normalize();
   let killedAny=false,hitAny=false;
   const aT=player.adsT;
+  const tgtList=NET.pvp?pvpTargets():enemies,myT=myTeamIdx();
   for(let p=0;p<W.pel;p++){
     const sprBase=E.spr*E.hipSpr;
     const spr=sprBase*(1-aT*(1-E.adsSpr*.4))
@@ -3047,8 +3854,8 @@ function tryFire(){
       .normalize();
     const tWall=castWalls(RAY_O,_v1,E.rng);
     const hitsArr=[];
-    for(const e of enemies){
-      if(e.dead||e.hp<=0||e.team===0)continue;
+    for(const e of tgtList){
+      if(e.dead||e.hp<=0||e.team===myT)continue;
       const th=raySphere(RAY_O.x,RAY_O.y,RAY_O.z,_v1.x,_v1.y,_v1.z,
         e.pos.x,e.pos.y+e.h*.9,e.pos.z,e.headR);
       const tb=raySphere(RAY_O.x,RAY_O.y,RAY_O.z,_v1.x,_v1.y,_v1.z,
@@ -3091,6 +3898,7 @@ function tryFire(){
       }
     }
     for(const[e,info]of dmgByE){
+      if(e.isAv){pvpSendHit(e.pid,info.d,info.head);continue;}
       if(damageEnemy(e,info.d,info.head,true,'YOU')==='kill')killedAny=true;
     }
   }
@@ -3163,9 +3971,17 @@ function explode(p,small){
     }
   }
   for(const e of enemies){
-    if(e.dead||e.team===0)continue;
+    if(e.dead||e.team===myTeamIdx())continue;
     const d=Math.hypot(e.pos.x-p.x,e.pos.z-p.z);
     if(d<R)damageEnemy(e,base*(1-d/R),false,true,'YOU');
+  }
+  if(NET.pvp){
+    for(const id in NET.avatars){
+      const av=NET.avatars[id],st=NET.players[id];
+      if(!st||st.dead||!pvpHostile(NET.myId,id))continue;
+      const d=Math.hypot(av.x-p.x,av.z-p.z);
+      if(d<R)pvpSendHit(id,base*(1-d/R),false);
+    }
   }
   const pd=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
   if(pd<R*.8)damagePlayer((small?34:45)*(1-pd/R),p);
@@ -3532,7 +4348,7 @@ function spawnEnemy(kind,team){
   enemies.push(e);
   return e;
 }
-function damageEnemy(e,dmg,head,byPlayer,src){
+function damageEnemy(e,dmg,head,byPlayer,src,kteam,kid){
   if(e.dead||state!=='playing')return '';
   if(NET.online&&!NET.isHost&&byPlayer){
     TMP_V.set(e.pos.x,e.pos.y+e.h*.6,e.pos.z);
@@ -3559,16 +4375,20 @@ function damageEnemy(e,dmg,head,byPlayer,src){
       if(head&&who==='YOU')headKills++;
       if(who==='YOU'){combo++;comboT=2.5;addStreak();registerGunChallenge(inv[curW]?.id);}
       const pts=e.team===1?100:60+(head?40:0)+Math.min(combo,10)*5;
-      gainPts(pts);
+      if(!NET.pvp||who==='YOU')gainPts(pts);
       SFX.kill();
       if(who==='YOU'){hitmark(true);padVibe(.15,.45,60);}
       floatPts('+'+pts,e.pos);
       killfeed(who,e.name,pts);
+      if(NET.pvp&&NET.isHost)netBroadcast({t:'kf',k:who==='YOU'?pvpName('HOST'):who,v:e.name,kid:byPlayer?(kid||'HOST'):null});
       addDecal(e.pos.x,e.pos.z);
       if(e.team<0&&Math.random()<.06)
         spawnDrop(e.pos.x,e.pos.z,PUP_KEYS[(Math.random()*4)|0]);
       if(isTDM()){
-        if(e.team===1){
+        if(NET.pvp){
+          const kt=(kteam===undefined)?myTeamIdx():kteam;
+          if(byPlayer&&e.team>=0&&e.team!==kt){teamScores[kt]++;pvpCreditKill(kid||'HOST');}
+        }else if(e.team===1){
           teamScores[0]++;
           if(isDOM())dom.tickets[1]-=1;
         }
@@ -3620,7 +4440,19 @@ function updateEnemies(dt){
     }
     else if(isTDM()&&e.team>=0){
       let bd=1e9;
-      if(e.team===1&&!pDead){
+      if(NET.pvp){
+        if(!pDead&&myTeamIdx()!==e.team){
+          bd=(player.pos.x-e.pos.x)**2+(player.pos.z-e.pos.z)**2;
+          attackPlayer=true;humanTgt={x:player.pos.x,y:player.pos.y,z:player.pos.z,eye:player.eye,id:null};
+        }
+        for(const id in NET.players){
+          if(id==='HOST')continue;
+          const s=NET.players[id];
+          if(!s||s.dead||s.tm===e.team)continue;
+          const d=(s.x-e.pos.x)**2+(s.z-e.pos.z)**2;
+          if(d<bd){bd=d;attackPlayer=true;humanTgt={x:s.x,y:s.y,z:s.z,eye:1.6,id};}
+        }
+      }else if(e.team===1&&!pDead){
         bd=(player.pos.x-e.pos.x)**2+(player.pos.z-e.pos.z)**2;
         attackPlayer=true;humanTgt={x:player.pos.x,y:player.pos.y,z:player.pos.z,eye:player.eye,id:null};
       }
@@ -3747,10 +4579,10 @@ function updateEnemies(dt){
           mvx=-dz/dist*e.speed*.5*e.strafe;
           mvz=dx/dist*e.speed*.5*e.strafe;
         }
-      }else if(attackPlayer&&flowDir(e,_flow)){
+      }else if(attackPlayer&&!(NET.pvp&&humanTgt&&humanTgt.id)&&flowDir(e,_flow)){
         const fl=Math.hypot(_flow.x,_flow.z)||1;
         mvx=_flow.x/fl*e.speed*spdMul;mvz=_flow.z/fl*e.speed*spdMul;
-      }else if(tgtObj){
+      }else if(tgtObj||(NET.pvp&&attackPlayer&&humanTgt&&humanTgt.id)){
         mvx=dx/dist*e.speed*spdMul;mvz=dz/dist*e.speed*spdMul;
       }
     }
@@ -3835,7 +4667,7 @@ function updateEnemies(dt){
       const reach=e.kind==='boss'?3:e.kind==='screamer'?2:1.9;
       if(hasTgt&&dist<reach&&e.meleeT<=0&&e.los){
         e.meleeT=.9;e.swingT=.3;
-        if(attackPlayer)dealHumanDamage(humanTgt,e.kind==='boss'?26:e.kind==='screamer'?14:18,e.pos);
+        if(attackPlayer)dealHumanDamage(humanTgt,e.kind==='boss'?26:e.kind==='screamer'?14:18,e.pos,{id:'BOT',n:e.name,t:e.team});
         else if(tgtObj)damageEnemy(tgtObj,30,false,false);
       }
     }else{
@@ -3879,7 +4711,7 @@ function enemyShoot(e,tgtObj,attackPlayer,dmgMul,humanTgt){
     spawnTracer(_v1,_v3,false,e.kind==='marksman'?1.4:.8);
   SFX.eShot(clamp(1-dist/55,.15,1));
   if(hit){
-    if(attackPlayer)dealHumanDamage(humanTgt,rnd(7,13)*dmgMul*(1+Math.min(round*.02,.5)),e.pos);
+    if(attackPlayer)dealHumanDamage(humanTgt,rnd(7,13)*dmgMul*(1+Math.min(round*.02,.5)),e.pos,{id:'BOT',n:e.name,t:e.team});
     else{
       const r2=damageEnemy(tgtObj,26*dmgMul,false,false,e.name);
       if(r2==='kill'){
@@ -3928,6 +4760,7 @@ function respawnBot(e){
 }
 function checkTDMWin(){
   if(!isTDM()||state!=='playing')return;
+  if(NET.pvp){if(NET.isHost)pvpCheckWin();return;}
   if(isDOM()){
     if(!tdmCfg.endless){
       if(dom.tickets[1]<=0)endGame(true);
@@ -4047,8 +4880,9 @@ function updateTurrets(dt){
 }
 
 /* ============ PLAYER DAMAGE ============ */
-function damagePlayer(dmg,srcPos){
+function damagePlayer(dmg,srcPos,by){
   if(pDead||player.down||state!=='playing')return;
+  if(NET.pvp&&NET.invuln>0)return;
   player.hp-=dmg;
   player.regenT=player.perks.stims?2.5:4.5;
   shakeT=Math.max(shakeT,.5);
@@ -4061,7 +4895,8 @@ function damagePlayer(dmg,srcPos){
     srcPos.z-player.pos.z)-player.yaw+Math.PI));
   updHp();
   if(player.hp<=0){
-    if(NET.online){
+    if(NET.pvp){pvpDie(by);}
+    else if(NET.online){
       player.hp=1;player.down=true;
       shakeT=Math.max(shakeT,.8);
       announce('DOWNED','CALL FOR HELP');
@@ -4077,6 +4912,11 @@ function damagePlayer(dmg,srcPos){
 }
 function respawnPlayer(){
   pDead=false;player.hp=player.maxHp;updHp();
+  if(NET.pvp){
+    pvpPlaceSpawn(false);NET.invuln=2.5;
+    inv.forEach(w=>w.mag=effStats(w).mag);updAmmo();
+    return;
+  }
   let x=map.spawn[0],z=map.spawn[1],guard=0;
   while(pointBlocked(x,z)&&guard++<20){
     x=map.spawn[0]+rnd(-6,6);z=map.spawn[1]+rnd(-6,6);
@@ -4956,7 +5796,7 @@ function updateInteract(){
   }
   if(bestIt.type==='pap'&&inv[curW].upg){label='P-AMPED · AMMO';cost=500;}
   if(cost>0)label+=' · '+cost;
-  if(NET.online&&!NET.isHost)label+=' · HOST ONLY';
+  if(NET.online&&!NET.isHost&&!NET.pvp)label+=' · HOST ONLY';
   const html=`<span class="pk">${actionLabel('interact')}</span>${label}`;
   if(html!==lastPrompt){
     lastPrompt=html;
@@ -4967,7 +5807,7 @@ function updateInteract(){
 function doInteract(){
   const it=interactCur;
   if(!it)return;
-  if(NET.online&&!NET.isHost){
+  if(NET.online&&!NET.isHost&&!NET.pvp){
     $('prompt').classList.add('deny');SFX.deny();
     setTimeout(()=>$('prompt').classList.remove('deny'),400);
     return;
@@ -5578,7 +6418,7 @@ function updatePlayer(dt,rdt){
 
 /* ============ WEAPON UPDATE ============ */
 function updateWeapon(dt){
-  if(player.down)return;
+  if(player.down||(pDead&&isTDM()))return;
   fireT-=dt;
   if(reloadT>0){
     reloadT-=dt;
@@ -5773,6 +6613,17 @@ function drawMinimap(){
       e.kind==='boss'?'#ff5040':settings.cbSafe?'#ff9d00':'#ff3030';
     mmCtx.beginPath();mmCtx.arc(x,y,e.kind==='boss'?4:2.5,0,6.28);mmCtx.fill();
   }
+  if(NET.pvp){
+    for(const id in NET.avatars){
+      const st=NET.players[id];if(!st||st.dead)continue;
+      const av=NET.avatars[id];
+      const d=Math.hypot(av.x-player.pos.x,av.z-player.pos.z);
+      if(d>(isFFA()?35:60)&&streak.uavT<=0)continue;
+      const[x,y]=tf(av.x,av.z);
+      mmCtx.fillStyle=pvpHex(pvpColorHex(id));
+      mmCtx.beginPath();mmCtx.arc(x,y,3,0,6.28);mmCtx.fill();
+    }
+  }
   mmCtx.fillStyle='#fff';
   mmCtx.beginPath();
   mmCtx.moveTo(c,c-6);mmCtx.lineTo(c-4,c+5);mmCtx.lineTo(c+4,c+5);
@@ -5878,6 +6729,8 @@ function updRoundTxt(){
   if(isDOM())
     s=`TICKETS ${Math.max(0,dom.tickets[0])} — ${Math.max(0,dom.tickets[1])} BLU`+
       ' · '+dom.flags.map(f=>f.id+':'+(f.owner===0?'R':f.owner===1?'B':'–')).join(' ');
+  else if(isFFA())
+    s=pvpFfaLine();
   else if(isTDM())
     s=`RED ${teamScores[0]} — ${teamScores[1]} BLU`+(tdmCfg.endless?'':' · FIRST TO '+tdmCfg.target);
   else
@@ -5887,7 +6740,7 @@ function updRoundTxt(){
     $('roundTxt').textContent=s;
     $('roundTxt').classList.toggle('danger',!isTDM()&&horrorMode);
   }
-  $('mapTxt').textContent=map.name+' · '+modeName();
+  $('mapTxt').textContent=map.name+' · '+modeName()+(mode==='otdm'?' · '+(NET.myTeam===1?'BLU':'RED'):'');
 }
 const tickPool=[];
 for(let i=0;i<12;i++){
@@ -5911,6 +6764,20 @@ function updCompass(){
     t.style.left=(50+rel/1.2*50)+'%';
     t.style.opacity=streak.uavT>0?clamp(1.4-d/80,.4,1):clamp(1.2-d/60,.25,1);
     t.style.background=e.team===1?'#2266cc':e.kind==='boss'?'#ff5040':eCol;
+  }
+  if(NET.pvp){
+    for(const id in NET.avatars){
+      const st=NET.players[id];if(!st||st.dead||ti>=12)continue;
+      const av=NET.avatars[id];
+      const dx=av.x-player.pos.x,dz=av.z-player.pos.z,d=Math.hypot(dx,dz);
+      if(d>(isFFA()?35:60)&&streak.uavT<=0)continue;
+      const rel=normAng(Math.atan2(dx,dz)-player.yaw+Math.PI);
+      if(Math.abs(rel)>1.2)continue;
+      const t=tickPool[ti++];
+      t.style.left=(50+rel/1.2*50)+'%';
+      t.style.opacity=clamp(1.2-d/60,.25,1);
+      t.style.background=pvpHex(pvpColorHex(id));
+    }
   }
   if(!isTDM()){
     const dx=map.box.x-player.pos.x,dz=map.box.z-player.pos.z;
@@ -6111,7 +6978,7 @@ addEventListener('keydown',e=>{
     return;
   }
   if(e.code==='Escape'){
-    if(state==='playing')pauseGame();
+    if(state==='playing'){if(uiPaused)resumeGame();else pauseGame();}
     else if(state==='paused')resumeGame();
     return;
   }
@@ -6139,7 +7006,7 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{keys[e.code]=false;});
 addEventListener('mousedown',e=>{
   initAudio();if(AC)AC.resume();
-  if(state!=='playing'||isMobile())return;
+  if(state!=='playing'||uiPaused||isMobile())return;
   if(!document.pointerLockElement){lockPointer();return;}
   if(e.button===0){mouseDown=true;fireQueued=true;}
   if(e.button===2)adsHeld=true;
@@ -6173,13 +7040,15 @@ document.addEventListener('visibilitychange',()=>{
 
 /* ============ FLOW ============ */
 function startGame(){
+  if((selMode==='otdm'||selMode==='ffa'||selMode==='queue')&&!(NET.online&&NET.pvp))return;
+  uiPaused=false;$('retryBtn').textContent='Run it back';
   clearCorruption();
   initAudio();if(AC)AC.resume();
   mode=selMode;
   if(isDOM()&&MAPS[selMap].theme!=='field')mode='tdm';
   map=MAPS[selMap];
   best=loadBest();
-  points=500;kills=0;shots=0;hitsC=0;headKills=0;ptsEarned=0;doorsOpened=0;
+  points=NET.pvp?1500:500;kills=0;shots=0;hitsC=0;headKills=0;ptsEarned=0;doorsOpened=0;
   combo=0;comboT=0;teamScores[0]=0;teamScores[1]=0;
   pu.insta=0;pu.dbl=0;fragCd=0;
   streak.kills=0;streak.uavT=0;
@@ -6204,9 +7073,10 @@ function startGame(){
       dom.tickets=[200,200];
       dom.flags.forEach(f=>{f.owner=-1;f.prog=0;});
     }
-    spawnBots();
+    if(NET.pvp)pvpBeginMatch();else spawnBots();
     round=1;roundState='tdm';
-    announce(isDOM()?'DOMINATION':'TEAM STRIKE',
+    if(NET.pvp)announce(isFFA()?'FREE FOR ALL':'TEAM STRIKE',isFFA()?'FIRST TO '+tdmCfg.target+' KILLS':'YOU ARE '+(NET.myTeam===1?'BLUE':'RED')+' · FIRST TO '+tdmCfg.target);
+    else announce(isDOM()?'DOMINATION':'TEAM STRIKE',
       isDOM()?'CAPTURE A · B · C':'FIRST TO '+tdmCfg.target+(tdmCfg.endless?' · ENDLESS':''));
   }else{
     round=1;roundState='fight';
@@ -6238,6 +7108,13 @@ function startGame(){
 }
 function pauseGame(){
   if(state!=='playing')return;
+  if(NET.pvp){ // online PvP never freezes the match
+    uiPaused=true;mouseDown=false;fireQueued=false;adsHeld=false;
+    $('pstats').innerHTML='<div><b>ONLINE</b> MATCH KEEPS RUNNING</div>';
+    $('pauseOv').style.display='flex';
+    if(document.pointerLockElement)document.exitPointerLock();
+    return;
+  }
   state='paused';
   $('pstats').innerHTML=
     `<div><b>ROUND</b> ${isTDM()?'—':round}</div>`+
@@ -6249,6 +7126,7 @@ function pauseGame(){
   if(document.pointerLockElement)document.exitPointerLock();
 }
 function resumeGame(){
+  uiPaused=false;
   state='playing';
   $('pauseOv').style.display='none';
   if(!isMobile())lockPointer();
@@ -6282,10 +7160,13 @@ function toMenu(){
   shopOpen=false;$('shopOv').style.display='none';
   padSetFocus(-1);padMenuEls=[];padMenuOvKey=null;
   clearCorruption();
+  Q.active=false;Q.token++;if(Q.stopSearch){Q.stopSearch();Q.stopSearch=null;}uiPaused=false;
   netReset();
   setLobbyUI('idle');
+  olIdle();
   netStatus('NOT CONNECTED');
   if(selMode==='coop')refreshLobbies();
+  else if(selMode==='ffa')refreshLobbies(FFA_LIST);
   $('deathOv').style.display='none';
   $('pauseOv').style.display='none';
   $('menu').style.display='flex';
@@ -6310,6 +7191,7 @@ function buildMenu(){
     b.className='mapCard'+(m.id===selMode?' on':'');
     b.innerHTML=`<h4>${m.name}</h4><p>${m.desc}</p><span class="sel">◆ SELECTED</span>`;
     b.onclick=()=>{
+      const prevMode=selMode;
       selMode=m.id;
       if(m.id==='solo'){
         const transit=MAPS.findIndex(x=>x.id==='frostline');
@@ -6317,10 +7199,7 @@ function buildMenu(){
       }
       mr.querySelectorAll('.mapCard').forEach(x=>x.classList.remove('on'));
       b.classList.add('on');
-      $('tdmCfg').style.display=(m.id==='tdm'||m.id==='dom')?'block':'none';
-      $('coopCfg').style.display=(m.id==='coop')?'block':'none';
-      $('startBtn').style.display=(m.id==='coop')?'none':'';
-      if(m.id==='coop')refreshLobbies();else if(!NET.online)stopLobbyWatch();
+      olOnModePick(m.id,prevMode);
       lbRender();
     };
     mr.appendChild(b);
@@ -6336,6 +7215,7 @@ function buildMenu(){
       mpr.querySelectorAll('.mapCard').forEach(x=>x.classList.remove('on'));
       b.classList.add('on');
       lbRender();
+      if(NET.isHost&&NET.ol&&state==='menu')olBroadcastLobby();
     };
     mpr.appendChild(b);
   });
@@ -6353,14 +7233,17 @@ function buildMenu(){
  $('cfgSize').oninput=e=>{
   tdmCfg.size=+e.target.value;
   $('cfgSizeV').textContent=tdmCfg.size+' v '+tdmCfg.size;
+  if(NET.isHost&&NET.ol)olBroadcastLobby();
 };
  $('cfgTarget').oninput=e=>{
   tdmCfg.target=+e.target.value;
   $('cfgTargetV').textContent=tdmCfg.target;
+  if(NET.isHost&&NET.ol)olBroadcastLobby();
 };
  $('cfgEndless').onclick=()=>{
   tdmCfg.endless=!tdmCfg.endless;
   $('cfgEndless').classList.toggle('on',tdmCfg.endless);
+  if(NET.isHost&&NET.ol)olBroadcastLobby();
 };
  $('startBtn').onclick=startGame;
  $('coopHostBtn').onclick=netHost;
@@ -6390,6 +7273,7 @@ function buildMenu(){
  $('pauseBtn').onclick=()=>{if(state==='playing')pauseGame();};
 function coopRetry(){
   if(NET.online&&!NET.isHost){SFX.deny();return;}
+  if(NET.online&&NET.isHost&&NET.ol){olStartMatch(true);return;}
   startGame();
   if(NET.online&&NET.isHost)netBroadcast({t:'start',mapIdx:selMap});
 }
@@ -6566,8 +7450,7 @@ function frame(){
   }
   if(state==='playing'){
     const sdt=rdt*timeScale;
-    updatePlayer(sdt,rdt);
-    updateWeapon(sdt);
+    if(!uiPaused){updatePlayer(sdt,rdt);updateWeapon(sdt);}
     updateEnemies(sdt);
     updateGrenades(sdt);
     updateDrops(sdt);
@@ -6608,9 +7491,32 @@ function frame(){
   }
 }
 
+
+function olWire(){
+  const inp=$('olNameInput');
+  inp.value=myCallsign;
+  inp.addEventListener('input',()=>{
+    inp.value=inp.value.toUpperCase().replace(/[^A-Z0-9_\- ]/g,'').slice(0,12);
+    const n=cleanName(inp.value);
+    if(n){myCallsign=n;try{localStorage.setItem('redline_name',n);}catch(e){}}
+  });
+  $('olHostBtn').onclick=olHostPrivate;
+  $('olFindBtn').onclick=()=>{Q.active=true;Q.tries=0;Q.bad.clear();qFind(Q.kind);};
+  $('olRefreshBtn').onclick=()=>refreshLobbies(FFA_LIST);
+  $('olJoinBtn').onclick=()=>olJoinCode($('olCodeInput').value);
+  $('olCodeInput').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);});
+  $('olCodeInput').addEventListener('keydown',e=>{if(e.key==='Enter')olJoinCode(e.target.value);});
+  $('olSwitchBtn').onclick=olSwitchTeam;
+  $('olBotsBtn').onclick=olToggleBots;
+  $('olStartBtn').onclick=()=>olStartMatch(false);
+  $('olLeaveBtn').onclick=olLeave;
+  $('olCancelBtn').onclick=olLeave;
+}
+
 /* ============ INIT ============ */
 applySettings();
 buildMenu();
+olWire();
  $('boot').style.display='none';
 frame();
 </script>

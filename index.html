@@ -547,13 +547,13 @@
     </div>
     <div id="lobbyList" style="border:1px solid rgba(244,242,238,.35);padding:8px;margin-bottom:10px;min-height:38px;font-size:10px;letter-spacing:.08em">NO OPEN LOBBIES</div>
     <div id="coopJoinRow" style="display:flex;gap:8px;margin-bottom:10px">
-      <input id="coopCodeInput" type="text" placeholder="OR PASTE A ROOM CODE" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64" style="flex:1;min-width:0;background:rgba(0,0,0,.4);border:1px solid rgba(244,242,238,.35);color:var(--paper);padding:8px 10px;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.08em">
+      <input id="coopCodeInput" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="OR ENTER 4-DIGIT CODE" autocomplete="off" spellcheck="false" maxlength="4" style="flex:1;min-width:0;background:rgba(0,0,0,.4);border:1px solid rgba(244,242,238,.35);color:var(--paper);padding:8px 10px;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.08em">
       <button id="coopJoinBtn" class="btnGhost" style="padding:8px 14px;font-size:10px">Join Code</button>
     </div>
     <div id="coopHostPanel" style="display:none;margin-bottom:8px">
       LOBBY ONLINE · PLAYERS <span id="coopPlayerCount">1/3</span>
       &nbsp;·&nbsp;<button id="coopStartBtn" class="btnGhost" style="padding:6px 14px;font-size:10px">Start Match</button>
-      <div style="margin-top:8px;font-size:10px;letter-spacing:.08em">ROOM CODE <b id="coopRoomCode" style="user-select:all;word-break:break-all"></b>
+      <div style="margin-top:8px;font-size:10px;letter-spacing:.08em">ROOM CODE <b id="coopRoomCode" style="user-select:all;font-size:20px;letter-spacing:.3em;margin-left:4px"></b>
         <button id="coopCopyBtn" class="btnGhost" style="padding:4px 10px;font-size:9px;margin-left:6px">Copy</button></div>
     </div>
     <div id="coopLeaveRow" style="display:none;margin-bottom:8px"><button id="coopLeaveBtn" class="btnGhost" style="padding:6px 14px;font-size:10px">Leave Lobby</button></div>
@@ -2060,7 +2060,11 @@ function updateHostCount() {
   if (el) el.textContent = (Object.keys(NET.conns).length + 1) + '/3';
 }
 
-function netHost() {
+const ROOM_PREFIX = 'redline-';
+const newRoomCode = () => String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+
+function netHost(attempt) {
+  attempt = typeof attempt === 'number' ? attempt : 0;   // button click passes an Event
   if (NET.peer || NET.connecting) return;
   if (!window.Peer) { netStatus('PEERJS FAILED TO LOAD · CHECK YOUR CONNECTION'); return; }
   NET.connecting = true; NET.isHost = true; NET.online = true; NET.myId = 'HOST';
@@ -2068,14 +2072,15 @@ function netHost() {
   stopLobbyWatch();
 
   let peer;
-  try { peer = new window.Peer({ debug: 0 }); }
+  const roomCode = newRoomCode();
+  try { peer = new window.Peer(ROOM_PREFIX + roomCode, { debug: 0 }); }
   catch (e) { netFail('WEBRTC UNAVAILABLE ON THIS BROWSER'); return; }
   NET.peer = peer;
 
   peer.on('open', id => {
     if (NET.peer !== peer) return;
-    NET.connecting = false; NET.roomCode = id;
-    const code = $('coopRoomCode'); if (code) code.textContent = id;
+    NET.connecting = false; NET.roomCode = roomCode;
+    const code = $('coopRoomCode'); if (code) code.textContent = roomCode;
     setLobbyUI('hosting');
     updateHostCount();
     netStatus('LOBBY OPEN · WAITING FOR PLAYERS');
@@ -2117,7 +2122,14 @@ function netHost() {
 
   peer.on('error', e => {
     if (NET.peer !== peer) return;
-    const t = String((e && e.type) || 'unknown').toUpperCase();
+    const raw = (e && e.type) || 'unknown';
+    const t = String(raw).toUpperCase();
+    if (NET.connecting && raw === 'unavailable-id' && attempt < 10) {   // code already in use: roll another
+      NET.peer = null; NET.connecting = false; NET.online = false;
+      try { peer.destroy(); } catch (err) {}
+      netHost(attempt + 1);
+      return;
+    }
     if (NET.connecting) netFail('HOST ERROR · ' + t);
     else netStatus('NETWORK WARNING · ' + t);
   });
@@ -2125,7 +2137,9 @@ function netHost() {
 
 function netJoin(peerId) {
   peerId = String(peerId || '').trim();
-  if (NET.peer || NET.connecting || !peerId) return;
+  if (/^\d{4}$/.test(peerId)) peerId = ROOM_PREFIX + peerId;
+  else if (!peerId.startsWith(ROOM_PREFIX)) { netStatus('ENTER THE 4-DIGIT ROOM CODE'); return; }
+  if (NET.peer || NET.connecting) return;
   if (!window.Peer) { netStatus('PEERJS FAILED TO LOAD · CHECK YOUR CONNECTION'); return; }
   NET.connecting = true; NET.isHost = false; NET.online = true;
   netStatus('CONNECTING…');
@@ -2165,7 +2179,7 @@ function netJoin(peerId) {
   peer.on('error', e => {
     if (NET.peer !== peer) return;
     const t = (e && e.type) || '';
-    if (t === 'peer-unavailable') netFail('LOBBY NO LONGER EXISTS · REFRESH THE LIST');
+    if (t === 'peer-unavailable') netFail('NO LOBBY WITH THAT CODE · CHECK IT AND TRY AGAIN');
     else if (NET.connecting) netFail('JOIN ERROR · ' + (t ? t.toUpperCase() : 'LOBBY UNAVAILABLE'));
     else netStatus('NETWORK WARNING · ' + (t ? t.toUpperCase() : 'UNKNOWN'));
   });
@@ -6358,6 +6372,7 @@ function buildMenu(){
   lobbyStop(); // match started: take the lobby off the public list
  };
  $('coopJoinBtn').onclick=()=>netJoin($('coopCodeInput').value);
+ $('coopCodeInput').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);});
  $('coopCodeInput').addEventListener('keydown',e=>{if(e.key==='Enter')netJoin(e.target.value);});
  $('coopCopyBtn').onclick=()=>{
   const c=NET.roomCode;if(!c)return;
